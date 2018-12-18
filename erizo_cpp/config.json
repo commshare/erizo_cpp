@@ -1,0 +1,78 @@
+{
+    "rabbitmq": {
+        "host": "localhost",
+        "port": 5672,
+        "username": "linmin",
+        "password": "linmin"
+    },
+    "bridge": {
+        "ip": "172.19.5.28",
+        "port": 50000
+    },
+    "ice": {
+        "stun": {
+            "host": "stun:stun.l.google.com",
+            "port": 19302
+        },
+        "turn": {
+            "host": "",
+            "port": 0,
+            "username": "",
+            "password": ""
+        },
+        "network_interface": "",
+        "ice_components": 0,
+        "should_trickle": false,
+        "min_port": 0,
+        "max_port": 0
+    },
+    "media": {
+        "audio_codec": "opus",
+        "video_codec": "vp8"
+    },
+    "mediaType": [
+        {
+            "payloadType": 111,
+            "encodingName": "opus",
+            "clockRate": 48000,
+            "channels": 2
+        },
+        {
+            "payloadType": 100,
+            "encodingName": "VP8",
+            "clockRate": 90000,
+            "channels": 1,
+            "feedbackTypes": [
+                "ccm fir",
+                "nack",
+                "nack pli",
+                "goog-remb"
+            ]
+        },
+        {
+            "payloadType": 101,
+            "encodingName": "H264",
+            "clockRate": 90000,
+            "channels": 1,
+            "formatParameters": {
+                "profile-level-id": "42e01f",
+                "level-asymmetry-allowed": "1",
+                "packetization-mode": "1"
+            },
+            "feedbackTypes": [
+                "ccm fir",
+                "nack",
+                "nack pli",
+                "goog-remb"
+            ]
+        }
+    ],
+    "extMappings": [
+        "urn:ietf:params:rtp-hdrext:ssrc-audio-level",
+        "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+        "urn:ietf:params:rtp-hdrext:toffset",
+        "urn:3gpp:video-orientation",
+        "http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+        "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id"
+    ]
+}
