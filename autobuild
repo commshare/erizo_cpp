@@ -9,11 +9,4 @@ make
 make install
 cd ${CURRENT_DIR}
 cp ./log4cxx.properties ./bin
-cp ./config.json ./bin
-cd ./bin
-./erizo_cpp 666666666666
-# cp ./bin/erizo_cpp ../erizo_agent_cpp/bin
-# cd ../erizo_agent_cpp/bin
-# ./erizo_agent_cpp
-cd ${CURRENT_DIR}
-
+cp ./erizo_config.json ./bin
