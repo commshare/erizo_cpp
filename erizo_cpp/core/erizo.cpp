@@ -34,10 +34,10 @@ int Erizo::init(const std::string &id)
 
     id_ = id;
 
-    io_thread_pool_ = std::make_shared<erizo::IOThreadPool>( Config::getInstance()->erizo_io_worker_num_);
+    io_thread_pool_ = std::make_shared<erizo::IOThreadPool>(Config::getInstance()->erizo_io_worker_num_);
     io_thread_pool_->start();
 
-    thread_pool_ = std::make_shared<erizo::ThreadPool>( Config::getInstance()->erizo_worker_num_);
+    thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num_);
     thread_pool_->start();
 
     amqp_broadcast_ = std::make_shared<AMQPHelper>();
@@ -174,7 +174,7 @@ void Erizo::keepAlive(const Json::Value &root)
 {
     if (!checkMsgFmt(root))
         return;
-    std::string replyto = root["replyTo"].asString();
+    std::string reply_to = root["replyTo"].asString();
     int corrid = root["corrID"].asInt();
 
     Json::Value reply;
@@ -184,7 +184,7 @@ void Erizo::keepAlive(const Json::Value &root)
     Json::FastWriter writer;
     std::string msg = writer.write(reply);
 
-    amqp_uniquecast_->addCallback({"rpcExchange", replyto, replyto, msg});
+    amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
 }
 
 void Erizo::addPublisher(const Json::Value &root)
@@ -192,7 +192,7 @@ void Erizo::addPublisher(const Json::Value &root)
     if (!checkMsgFmt(root) || !checkArgs(root))
         return;
 
-    std::string replyto = root["replyTo"].asString();
+    std::string reply_to = root["replyTo"].asString();
     int corrid = root["corrID"].asInt();
 
     Json::Value args = root["args"];
@@ -209,7 +209,7 @@ void Erizo::addPublisher(const Json::Value &root)
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     std::shared_ptr<Connection> connection = client->createConnection();
-    connection->init(stream_id, stream_label, true, amqp_uniquecast_, replyto, corrid);
+    connection->init(stream_id, stream_label, true, amqp_uniquecast_, reply_to, corrid);
     publishers_[stream_id] = connection;
 
     Json::Value reply;
@@ -219,7 +219,7 @@ void Erizo::addPublisher(const Json::Value &root)
     Json::FastWriter writer;
     std::string msg = writer.write(reply);
 
-    amqp_uniquecast_->addCallback({"rpcExchange", replyto, replyto, msg});
+    amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
 }
 
 bool Erizo::processPublisherSignaling(const Json::Value &root)
@@ -227,7 +227,7 @@ bool Erizo::processPublisherSignaling(const Json::Value &root)
     if (!checkMsgFmt(root) || !checkArgs(root))
         return true;
 
-    std::string replyto = root["replyTo"].asString();
+    std::string reply_to = root["replyTo"].asString();
 
     Json::Value args = root["args"];
     std::string client_id = args[0].asString();
@@ -297,7 +297,7 @@ bool Erizo::processSubscirberSignaling(const Json::Value &root)
     if (!checkMsgFmt(root) || !checkArgs(root))
         return true;
 
-    std::string replyto = root["replyTo"].asString();
+    std::string reply_to = root["replyTo"].asString();
     Json::Value args = root["args"];
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
@@ -378,7 +378,7 @@ void Erizo::addSubscriber(const Json::Value &root)
 {
     if (!checkMsgFmt(root) || !checkArgs(root))
         return;
-    std::string replyto = root["replyTo"].asString();
+    std::string reply_to = root["replyTo"].asString();
     int corrid = root["corrID"].asInt();
 
     Json::Value args = root["args"];
@@ -418,7 +418,7 @@ void Erizo::addSubscriber(const Json::Value &root)
 
         std::shared_ptr<Client> client = getOrCreateClient(client_id);
         std::shared_ptr<Connection> subscribe_connection = client->createConnection();
-        subscribe_connection->init(stream_id, stream_label, false, amqp_uniquecast_, replyto, corrid);
+        subscribe_connection->init(stream_id, stream_label, false, amqp_uniquecast_, reply_to, corrid);
 
         publisher_connection->addSubscriber(client_id, subscribe_connection->getMediaStream());
 
@@ -432,6 +432,6 @@ void Erizo::addSubscriber(const Json::Value &root)
         Json::FastWriter writer;
         std::string msg = writer.write(reply);
 
-        amqp_uniquecast_->addCallback({"rpcExchange", replyto, replyto, msg});
+        amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
     }
 }

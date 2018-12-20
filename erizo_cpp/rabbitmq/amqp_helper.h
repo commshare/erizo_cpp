@@ -13,23 +13,25 @@
 #include <functional>
 #include <condition_variable>
 
-struct AMQPData
-{
-  std::string exchange;
-  std::string queuename;
-  std::string binding_key;
-  std::string msg;
-};
-
 class AMQPHelper
 {
   DECLARE_LOGGER();
+
+  struct AMQPData
+  {
+    std::string exchange;
+    std::string queuename;
+    std::string binding_key;
+    std::string msg;
+  };
 
 public:
   AMQPHelper();
   ~AMQPHelper();
 
-  int init(const std::string &exchange, const std::string &binding_key, std::function<void(const std::string &msg)> func);
+  int init(const std::string &exchange,
+           const std::string &binding_key,
+           const std::function<void(const std::string &msg)> &func);
   void close();
   void addCallback(const AMQPData &data);
 

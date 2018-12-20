@@ -90,7 +90,9 @@ int AMQPHelper::checkError(amqp_rpc_reply_t x)
     return 1;
 }
 
-int AMQPHelper::init(const std::string &exchange, const std::string &binding_key, std::function<void(const std::string &msg)> func)
+int AMQPHelper::init(const std::string &exchange,
+                     const std::string &binding_key,
+                     const std::function<void(const std::string &msg)> &func)
 {
     if (init_)
     {
