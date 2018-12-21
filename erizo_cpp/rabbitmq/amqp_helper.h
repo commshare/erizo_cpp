@@ -33,7 +33,8 @@ public:
            const std::string &binding_key,
            const std::function<void(const std::string &msg)> &func);
   void close();
-  void addCallback(const AMQPData &data);
+  //void addCallback(const AMQPData &data);
+  void addCallback(const std::string &queuename, const std::string &binding_key, const std::string &send_msg);
 
 private:
   int checkError(amqp_rpc_reply_t x);

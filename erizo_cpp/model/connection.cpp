@@ -33,18 +33,18 @@ void Connection::initWebRtcConnection()
     std::shared_ptr<erizo::IOWorker> io_worker = io_thread_pool_->getLessUsedIOWorker();
 
     erizo::IceConfig ice_config;
-    ice_config.stun_server =  Config::getInstance()->stun_server_;
-    ice_config.stun_port =  Config::getInstance()->stun_port_;
-    ice_config.min_port =  Config::getInstance()->min_port_;
-    ice_config.max_port =  Config::getInstance()->max_port_;
-    ice_config.should_trickle =  Config::getInstance()->should_trickle_;
-    ice_config.turn_server =  Config::getInstance()->turn_server_;
-    ice_config.turn_port =  Config::getInstance()->turn_port_;
-    ice_config.turn_username =  Config::getInstance()->turn_username_;
-    ice_config.turn_pass =  Config::getInstance()->turn_password_;
-    ice_config.network_interface =  Config::getInstance()->network_interface_;
+    ice_config.stun_server = Config::getInstance()->stun_server_;
+    ice_config.stun_port = Config::getInstance()->stun_port_;
+    ice_config.min_port = Config::getInstance()->min_port_;
+    ice_config.max_port = Config::getInstance()->max_port_;
+    ice_config.should_trickle = Config::getInstance()->should_trickle_;
+    ice_config.turn_server = Config::getInstance()->turn_server_;
+    ice_config.turn_port = Config::getInstance()->turn_port_;
+    ice_config.turn_username = Config::getInstance()->turn_username_;
+    ice_config.turn_pass = Config::getInstance()->turn_password_;
+    ice_config.network_interface = Config::getInstance()->network_interface_;
 
-    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, id_, ice_config,  Config::getInstance()->getRtpMaps(),  Config::getInstance()->getExpMaps(), this);
+    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, id_, ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
 }
 
 void Connection::init(const std::string &stream_id,
@@ -131,7 +131,7 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         reply["type"] = "callback";
         Json::FastWriter writer;
         std::string msg = writer.write(reply);
-        amqp_helper_->addCallback({"rpcExchange", reply_to_, reply_to_, msg});
+        amqp_helper_->addCallback(reply_to_, reply_to_, msg);
     }
     break;
     case erizo::CONN_SDP_PROCESSED:
@@ -143,7 +143,7 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         reply["data"]["sdp"] = message;
         Json::FastWriter writer;
         std::string msg = writer.write(reply);
-        amqp_helper_->addCallback({"rpcExchange", reply_to_, reply_to_, msg});
+        amqp_helper_->addCallback(reply_to_, reply_to_, msg);
     }
     break;
     case erizo::CONN_READY:
@@ -155,7 +155,7 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         Json::FastWriter writer;
         std::string msg = writer.write(reply);
         ready_ = true;
-        amqp_helper_->addCallback({"rpcExchange", reply_to_, reply_to_, msg});
+        amqp_helper_->addCallback(reply_to_, reply_to_, msg);
     }
     break;
     default:

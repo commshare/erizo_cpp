@@ -32,6 +32,8 @@ public:
   std::string rabbitmq_passwd_;
   std::string rabbitmq_hostname_;
   unsigned short rabbitmq_port_;
+  std::string uniquecast_exchange_;
+  std::string boardcast_exchange_;
 
   // Bridge config
   std::string bridge_ip_;
@@ -66,6 +68,5 @@ private:
   std::vector<erizo::ExtMap> ext_maps_;
   std::vector<erizo::RtpMap> rtp_maps_;
 };
-
 
 #endif

@@ -27,6 +27,8 @@ Config::Config()
     rabbitmq_passwd_ = "linmin";
     rabbitmq_hostname_ = "localhost";
     rabbitmq_port_ = 5672;
+    uniquecast_exchange_ = "erizo_uniquecast_exchange";
+    boardcast_exchange_ = "erizo_boardcast_exchange";
 
     bridge_ip_ = "172.19.5.28";
     bridge_port_ = 50000;
@@ -53,27 +55,31 @@ Config::Config()
 int Config::initConfig(const Json::Value &root)
 {
     Json::Value rabbitmq = root["rabbitmq"];
-    if (rabbitmq.isNull() ||
+    if (rabbitmq.isMember() ||
         rabbitmq.type() != Json::objectValue ||
-        rabbitmq["host"].isNull() ||
+        rabbitmq["host"].isMember() ||
         rabbitmq["host"].type() != Json::stringValue ||
-        rabbitmq["port"].isNull() ||
+        rabbitmq["port"].isMember() ||
         rabbitmq["port"].type() != Json::intValue ||
-        rabbitmq["username"].isNull() ||
+        rabbitmq["username"].isMember() ||
         rabbitmq["username"].type() != Json::stringValue ||
-        rabbitmq["password"].isNull() ||
-        rabbitmq["password"].type() != Json::stringValue)
+        rabbitmq["password"].isMember() ||
+        rabbitmq["password"].type() != Json::stringValue ||
+        rabbitmq["boardcast_exchange"].isMember() ||
+        rabbitmq["boardcast_exchange"].type() != Json::stringValue ||
+        rabbitmq["uniquecast_exchange"].isMember() ||
+        rabbitmq["uniquecast_exchange"].type() != Json::stringValue)
     {
         ELOG_ERROR("Rabbitmq config check error");
         return 1;
     }
 
     Json::Value bridge = root["bridge"];
-    if (bridge.isNull() ||
+    if (bridge.isMember() ||
         bridge.type() != Json::objectValue ||
-        bridge["ip"].isNull() ||
+        bridge["ip"].isMember() ||
         bridge["ip"].type() != Json::stringValue ||
-        bridge["port"].isNull() ||
+        bridge["port"].isMember() ||
         bridge["port"].type() != Json::intValue)
     {
         ELOG_ERROR("Bridge config check error");
@@ -81,17 +87,17 @@ int Config::initConfig(const Json::Value &root)
     }
 
     Json::Value ice = root["ice"];
-    if (ice.isNull() ||
+    if (ice.isMember() ||
         ice.type() != Json::objectValue ||
-        ice["network_interface"].isNull() ||
+        ice["network_interface"].isMember() ||
         ice["network_interface"].type() != Json::stringValue ||
-        ice["ice_components"].isNull() ||
+        ice["ice_components"].isMember() ||
         ice["ice_components"].type() != Json::intValue ||
-        ice["should_trickle"].isNull() ||
+        ice["should_trickle"].isMember() ||
         ice["should_trickle"].type() != Json::booleanValue ||
-        ice["min_port"].isNull() ||
+        ice["min_port"].isMember() ||
         ice["min_port"].type() != Json::intValue ||
-        ice["max_port"].isNull() ||
+        ice["max_port"].isMember() ||
         ice["max_port"].type() != Json::intValue)
     {
         ELOG_ERROR("Ice config check error");
@@ -99,11 +105,11 @@ int Config::initConfig(const Json::Value &root)
     }
 
     Json::Value stun = ice["stun"];
-    if (stun.isNull() ||
+    if (stun.isMember() ||
         stun.type() != Json::objectValue ||
-        stun["host"].isNull() ||
+        stun["host"].isMember() ||
         stun["host"].type() != Json::stringValue ||
-        stun["port"].isNull() ||
+        stun["port"].isMember() ||
         stun["port"].type() != Json::intValue)
     {
         ELOG_ERROR("Ice stun check error");
@@ -111,15 +117,15 @@ int Config::initConfig(const Json::Value &root)
     }
 
     Json::Value turn = ice["turn"];
-    if (turn.isNull() ||
+    if (turn.isMember() ||
         turn.type() != Json::objectValue ||
-        turn["host"].isNull() ||
+        turn["host"].isMember() ||
         turn["host"].type() != Json::stringValue ||
-        turn["port"].isNull() ||
+        turn["port"].isMember() ||
         turn["port"].type() != Json::intValue ||
-        turn["username"].isNull() ||
+        turn["username"].isMember() ||
         turn["username"].type() != Json::stringValue ||
-        turn["password"].isNull() ||
+        turn["password"].isMember() ||
         turn["password"].type() != Json::stringValue)
     {
         ELOG_ERROR("Ice turn check error");
@@ -127,11 +133,11 @@ int Config::initConfig(const Json::Value &root)
     }
 
     Json::Value media = root["media"];
-    if (media.isNull() ||
+    if (media.isMember() ||
         media.type() != Json::objectValue ||
-        media["audio_codec"].isNull() ||
+        media["audio_codec"].isMember() ||
         media["audio_codec"].type() != Json::stringValue ||
-        media["video_codec"].isNull() ||
+        media["video_codec"].isMember() ||
         media["video_codec"].type() != Json::stringValue)
     {
         ELOG_ERROR("Media check error");
@@ -142,6 +148,9 @@ int Config::initConfig(const Json::Value &root)
     rabbitmq_port_ = rabbitmq["port"].asInt();
     rabbitmq_username_ = rabbitmq["username"].asString();
     rabbitmq_passwd_ = rabbitmq["password"].asString();
+    uniquecast_exchange_ = rabbitmq["uniquecast_exchange"].asString();
+    boardcast_exchange_ = rabbitmq["boardcast_exchange"].asString();
+
     bridge_ip_ = bridge["ip"].asString();
     bridge_port_ = bridge["port"].asInt();
     stun_server_ = stun["host"].asString();
@@ -164,7 +173,7 @@ int Config::initConfig(const Json::Value &root)
 int Config::initMedia(const Json::Value &root)
 {
     ext_maps_.clear();
-    if (!root["extMappings"].isNull() && root["extMappings"].type() == Json::arrayValue)
+    if (!root["extMappings"].isMember() && root["extMappings"].type() == Json::arrayValue)
     {
         uint32_t num = root["extMappings"].size();
         for (uint32_t i = 0; i < num; i++)
@@ -174,35 +183,35 @@ int Config::initMedia(const Json::Value &root)
     }
 
     rtp_maps_.clear();
-    if (!root["mediaType"].isNull() && root["mediaType"].type() == Json::arrayValue)
+    if (!root["mediaType"].isMember() && root["mediaType"].type() == Json::arrayValue)
     {
         uint32_t num = root["mediaType"].size();
         for (uint32_t i = 0; i < num; i++)
         {
             Json::Value value = root["mediaType"][i];
             erizo::RtpMap rtp_map;
-            if (!value["payloadType"].isNull() && value["payloadType"].type() == Json::intValue)
+            if (!value["payloadType"].isMember() && value["payloadType"].type() == Json::intValue)
             {
                 rtp_map.payload_type = value["payloadType"].asInt();
             }
 
-            if (!value["clockRate"].isNull() && value["clockRate"].type() == Json::intValue)
+            if (!value["clockRate"].isMember() && value["clockRate"].type() == Json::intValue)
             {
                 rtp_map.clock_rate = value["clockRate"].asInt();
             }
-            if (!value["channels"].isNull() && value["channels"].type() == Json::intValue)
+            if (!value["channels"].isMember() && value["channels"].type() == Json::intValue)
             {
                 rtp_map.channels = value["channels"].asInt();
             }
 
-            if (!value["feedbackTypes"].isNull() && value["feedbackTypes"].type() == Json::arrayValue)
+            if (!value["feedbackTypes"].isMember() && value["feedbackTypes"].type() == Json::arrayValue)
             {
                 uint32_t fb_type_num = value["feedbackTypes"].size();
                 for (uint32_t j = 0; j < fb_type_num && (value["feedbackTypes"][j].type() == Json::stringValue); j++)
                     rtp_map.feedback_types.push_back(value["feedbackTypes"][j].asString());
             }
 
-            if (!value["formatParameters"].isNull() && value["formatParameters"].type() == Json::objectValue)
+            if (!value["formatParameters"].isMember() && value["formatParameters"].type() == Json::objectValue)
             {
                 Json::Value::Members members = value["formatParameters"].getMemberNames();
                 Json::Value fmt_param = value["formatParameters"];
@@ -214,7 +223,7 @@ int Config::initMedia(const Json::Value &root)
                 }
             }
 
-            if (!value["encodingName"].isNull() && value["encodingName"].type() == Json::stringValue)
+            if (!value["encodingName"].isMember() && value["encodingName"].type() == Json::stringValue)
             {
 
                 rtp_map.encoding_name = value["encodingName"].asString();
@@ -256,7 +265,7 @@ int Config::init(const std::string &config_file)
         return 1;
     }
 
-    if(initMedia(root))
+    if (initMedia(root))
     {
         ELOG_ERROR("initMedia failed");
         return 1;

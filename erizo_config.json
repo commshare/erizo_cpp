@@ -3,7 +3,9 @@
         "host": "localhost",
         "port": 5672,
         "username": "linmin",
-        "password": "linmin"
+        "password": "linmin",
+        "uniquecast_exchange": "erizo_uniquecast_exchange",
+        "boardcast_exchange": "erizo_boardcast_exchange"
     },
     "bridge": {
         "ip": "172.19.5.28",

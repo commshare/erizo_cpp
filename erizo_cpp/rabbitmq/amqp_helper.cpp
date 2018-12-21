@@ -38,10 +38,10 @@ int AMQPHelper::callback(const std::string &exchange, const std::string &queuena
     return 0;
 }
 
-void AMQPHelper::addCallback(const AMQPData &data)
+void AMQPHelper::addCallback(const std::string &queuename, const std::string &binding_key, const std::string &send_msg)
 {
     std::unique_lock<std::mutex> lock(mux_);
-    queue_.push(data);
+    queue_.push({Config::getInstance()->uniquecast_exchange_, queuename, binding_key, send_msg});
     cond_.notify_one();
 }
 
@@ -133,7 +133,7 @@ int AMQPHelper::init(const std::string &exchange,
     }
 
     amqp_queue_declare_ok_t *r = amqp_queue_declare(
-        conn_, 1, amqp_empty_bytes, 0, 0, 0, 1, amqp_empty_table);
+        conn_, 1, amqp_empty_bytes, 0, 0, 1, 1, amqp_empty_table);
     res = amqp_get_rpc_reply(conn_);
     if (checkError(res))
     {
@@ -167,7 +167,7 @@ int AMQPHelper::init(const std::string &exchange,
     }
 
     run_ = true;
-    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([&, exchange, binding_key, func]() {
+    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([this, func]() {
         while (run_)
         {
             amqp_rpc_reply_t res;

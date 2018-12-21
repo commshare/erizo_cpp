@@ -41,7 +41,7 @@ int Erizo::init(const std::string &id)
     thread_pool_->start();
 
     amqp_broadcast_ = std::make_shared<AMQPHelper>();
-    int res = amqp_broadcast_->init("broadcastExchange", "ErizoJS", [&](const std::string &msg) {
+    int res = amqp_broadcast_->init(Config::getInstance()->boardcast_exchange_, "ErizoJS", [&](const std::string &msg) {
     });
     if (res)
     {
@@ -51,12 +51,12 @@ int Erizo::init(const std::string &id)
 
     std::string uniquecast_binding_key_ = "ErizoJS_" + id_;
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
-    res = amqp_uniquecast_->init("rpcExchange", uniquecast_binding_key_, [&](const std::string &msg) {
+    res = amqp_uniquecast_->init(Config::getInstance()->uniquecast_exchange_, uniquecast_binding_key_, [&](const std::string &msg) {
         Json::Value root;
         Json::Reader reader;
         if (!reader.parse(msg, root))
             return;
-        if (root["method"].isNull() || root["method"].type() != Json::stringValue)
+        if (root["method"].isMember() || root["method"].type() != Json::stringValue)
             return;
 
         std::string method = root["method"].asString();
@@ -139,9 +139,9 @@ void Erizo::close()
 
 bool Erizo::checkMsgFmt(const Json::Value &root)
 {
-    if (root["replyTo"].isNull() ||
+    if (root["replyTo"].isMember() ||
         root["replyTo"].type() != Json::stringValue ||
-        root["corrID"].isNull() ||
+        root["corrID"].isMember() ||
         root["corrID"].type() != Json::intValue)
     {
         ELOG_ERROR("message format error");
@@ -153,7 +153,7 @@ bool Erizo::checkMsgFmt(const Json::Value &root)
 bool Erizo::checkArgs(const Json::Value &root)
 {
     Json::Value args = root["args"];
-    if (args.isNull() || args.type() != Json::arrayValue)
+    if (args.isMember() || args.type() != Json::arrayValue)
     {
         ELOG_ERROR("Request without args");
         return false;
@@ -184,7 +184,7 @@ void Erizo::keepAlive(const Json::Value &root)
     Json::FastWriter writer;
     std::string msg = writer.write(reply);
 
-    amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
+    amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
 }
 
 void Erizo::addPublisher(const Json::Value &root)
@@ -200,7 +200,7 @@ void Erizo::addPublisher(const Json::Value &root)
     std::string stream_id = args[1].asString();
     Json::Value options = args[2];
 
-    if (options["label"].isNull() || options["label"].type() != Json::stringValue)
+    if (options["label"].isMember() || options["label"].type() != Json::stringValue)
     {
         ELOG_ERROR("addPubilsher stream label is null or type wrong");
         return;
@@ -219,7 +219,7 @@ void Erizo::addPublisher(const Json::Value &root)
     Json::FastWriter writer;
     std::string msg = writer.write(reply);
 
-    amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
+    amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
 }
 
 bool Erizo::processPublisherSignaling(const Json::Value &root)
@@ -238,7 +238,7 @@ bool Erizo::processPublisherSignaling(const Json::Value &root)
     if (it != publishers_.end())
     {
         std::shared_ptr<Connection> connection = it->second;
-        if (options["type"].isNull() || options["type"].type() != Json::stringValue)
+        if (options["type"].isMember() || options["type"].type() != Json::stringValue)
         {
             ELOG_ERROR("processSignaling signaling type error");
             return true;
@@ -247,7 +247,7 @@ bool Erizo::processPublisherSignaling(const Json::Value &root)
         std::string signaling_type = options["type"].asString();
         if (!signaling_type.compare("offer"))
         {
-            if (options["sdp"].isNull() || options["sdp"].type() != Json::stringValue)
+            if (options["sdp"].isMember() || options["sdp"].type() != Json::stringValue)
             {
                 ELOG_ERROR("processSignaling sdp is null or type wrong");
                 return true;
@@ -262,18 +262,18 @@ bool Erizo::processPublisherSignaling(const Json::Value &root)
         }
         else if (!signaling_type.compare("candidate"))
         {
-            if (options["candidate"].isNull() || options["candidate"].type() != Json::objectValue)
+            if (options["candidate"].isMember() || options["candidate"].type() != Json::objectValue)
             {
                 ELOG_ERROR("processSignaling candidate is null or type wrong");
                 return true;
             }
 
             Json::Value candidate = options["candidate"];
-            if (candidate["sdpMLineIndex"].isNull() ||
+            if (candidate["sdpMLineIndex"].isMember() ||
                 candidate["sdpMLineIndex"].type() != Json::uintValue ||
-                candidate["sdpMid"].isNull() ||
+                candidate["sdpMid"].isMember() ||
                 candidate["sdpMid"].type() != Json::stringValue ||
-                candidate["candidate"].isNull() ||
+                candidate["candidate"].isMember() ||
                 candidate["candidate"].type() != Json::stringValue)
             {
                 int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
@@ -311,7 +311,7 @@ bool Erizo::processSubscirberSignaling(const Json::Value &root)
         if (subscriber_streams_it != subscribe_streams.end())
         {
             std::shared_ptr<Connection> connection = subscriber_streams_it->second;
-            if (options["type"].isNull() || options["type"].type() != Json::stringValue)
+            if (options["type"].isMember() || options["type"].type() != Json::stringValue)
             {
                 ELOG_ERROR("processSignaling signaling type error");
                 return true;
@@ -320,7 +320,7 @@ bool Erizo::processSubscirberSignaling(const Json::Value &root)
             std::string signaling_type = options["type"].asString();
             if (!signaling_type.compare("offer"))
             {
-                if (options["sdp"].isNull() || options["sdp"].type() != Json::stringValue)
+                if (options["sdp"].isMember() || options["sdp"].type() != Json::stringValue)
                 {
                     ELOG_ERROR("processSignaling sdp is null or type wrong");
                     return true;
@@ -335,18 +335,18 @@ bool Erizo::processSubscirberSignaling(const Json::Value &root)
             }
             else if (!signaling_type.compare("candidate"))
             {
-                if (options["candidate"].isNull() || options["candidate"].type() != Json::objectValue)
+                if (options["candidate"].isMember() || options["candidate"].type() != Json::objectValue)
                 {
                     ELOG_ERROR("processSignaling candidate is null or type wrong");
                     return true;
                 }
 
                 Json::Value candidate = options["candidate"];
-                if (candidate["sdpMLineIndex"].isNull() ||
+                if (candidate["sdpMLineIndex"].isMember() ||
                     candidate["sdpMLineIndex"].type() != Json::uintValue ||
-                    candidate["sdpMid"].isNull() ||
+                    candidate["sdpMid"].isMember() ||
                     candidate["sdpMid"].type() != Json::stringValue ||
-                    candidate["candidate"].isNull() ||
+                    candidate["candidate"].isMember() ||
                     candidate["candidate"].type() != Json::stringValue)
                 {
                     int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
@@ -396,7 +396,7 @@ void Erizo::addSubscriber(const Json::Value &root)
             return;
         }
 
-        if (options["label"].isNull() || options["label"].type() != Json::stringValue)
+        if (options["label"].isMember() || options["label"].type() != Json::stringValue)
         {
             ELOG_ERROR("addSubscriber stream label is null or type wrong");
             return;
@@ -432,6 +432,6 @@ void Erizo::addSubscriber(const Json::Value &root)
         Json::FastWriter writer;
         std::string msg = writer.write(reply);
 
-        amqp_uniquecast_->addCallback({"rpcExchange", reply_to, reply_to, msg});
+        amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
     }
 }
