@@ -29,9 +29,9 @@ private:
   Json::Value addSubscriber(const Json::Value &root);
   Json::Value processSignaling(const Json::Value &root);
 
-  std::shared_ptr<Connection> findConn(const std::string &client_id, const std::string &stream_id);
-  std::shared_ptr<Connection> findConn(const std::string &stream_id);
+  std::shared_ptr<Connection> getPublisher(const std::string &stream_id);
   std::shared_ptr<Client> getOrCreateClient(const std::string &client_id);
+  std::shared_ptr<Client> getClient(const std::string &client_id);
 
 private:
   std::shared_ptr<AMQPHelper> amqp_uniquecast_;

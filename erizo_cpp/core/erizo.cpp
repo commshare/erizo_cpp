@@ -126,7 +126,7 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
     std::string reply_to = args[3].asString();
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
-    std::shared_ptr<Connection> pub_conn = findConn(stream_id);
+    std::shared_ptr<Connection> pub_conn = getPublisher(stream_id);
     if (pub_conn == nullptr)
         return Json::nullValue;
 
@@ -208,7 +208,11 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     std::string stream_id = args[1].asString();
     Json::Value msg = args[2];
 
-    std::shared_ptr<Connection> conn = findConn(client_id, stream_id);
+    std::shared_ptr<Client> client = getClient(client_id);
+    if (client == nullptr)
+        return Json::nullValue;
+
+    std::shared_ptr<Connection> conn = client->getConnection(stream_id);
     if (conn == nullptr)
         return Json::nullValue;
 
@@ -231,7 +235,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
         if (!msg.isMember("candidate") ||
             msg["candidate"].type() != Json::objectValue)
             return Json::nullValue;
-    
+
         Json::Value candidate = msg["candidate"];
         if (!candidate.isMember("sdpMLineIndex") ||
             candidate["sdpMLineIndex"].type() != Json::uintValue ||
@@ -252,43 +256,11 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     return data;
 }
 
-std::shared_ptr<Connection> Erizo::findConn(const std::string &client_id, const std::string &stream_id)
-{
-    auto it = clients_.find(client_id);
-    if (it != clients_.end())
-    {
-        {
-            std::shared_ptr<Client> client = it->second;
-            std::vector<std::shared_ptr<Connection>> &publishers = client->publishers;
-            auto itc = std::find_if(publishers.begin(), publishers.end(), [&](std::shared_ptr<Connection> connection) {
-                if (!connection->getStreamId().compare(stream_id))
-                    return true;
-                return false;
-            });
-            if (itc != publishers.end())
-                return *itc;
-        }
-        {
-            std::shared_ptr<Client> client = it->second;
-            std::vector<std::shared_ptr<Connection>> &subscribers = client->subscribers;
-            auto itc = std::find_if(subscribers.begin(), subscribers.end(), [&](std::shared_ptr<Connection> connection) {
-                if (!connection->getStreamId().compare(stream_id))
-                    return true;
-                return false;
-            });
-            if (itc != subscribers.end())
-                return *itc;
-        }
-    }
-    return nullptr;
-}
-
-std::shared_ptr<Connection> Erizo::findConn(const std::string &stream_id)
+std::shared_ptr<Connection> Erizo::getPublisher(const std::string &stream_id)
 {
     for (auto it = clients_.begin(); it != clients_.end(); it++)
     {
-        std::shared_ptr<Client> client = it->second;
-        std::vector<std::shared_ptr<Connection>> &publishers = client->publishers;
+        std::vector<std::shared_ptr<Connection>> &publishers = it->second->publishers;
         auto itc = std::find_if(publishers.begin(), publishers.end(), [&](std::shared_ptr<Connection> connection) {
             if (!connection->getStreamId().compare(stream_id))
                 return true;
@@ -309,4 +281,12 @@ std::shared_ptr<Client> Erizo::getOrCreateClient(const std::string &client_id)
         clients_[client_id]->id = client_id;
     }
     return clients_[client_id];
+}
+
+std::shared_ptr<Client> Erizo::getClient(const std::string &client_id)
+{
+    auto it = clients_.find(client_id);
+    if (it != clients_.end())
+        return it->second;
+    return nullptr;
 }
