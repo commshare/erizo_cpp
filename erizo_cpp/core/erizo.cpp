@@ -134,7 +134,7 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
     sub_conn->setConnectionListener(this);
     sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
 
-    pub_conn->addSubscriber(stream_id, sub_conn->getMediaStream());
+    pub_conn->addSubscriber(client_id, sub_conn->getMediaStream());
     client->subscribers.push_back(sub_conn);
 
     Json::Value data;
