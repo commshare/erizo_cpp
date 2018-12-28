@@ -14,47 +14,56 @@
 
 #include "rabbitmq/amqp_helper.h"
 
+class ConnectionListener
+{
+public:
+  virtual void onEvent(const std::string &reply_to, const std::string &event) = 0;
+};
+
 class Connection : public erizo::WebRtcConnectionEventListener
 {
   DECLARE_LOGGER();
 
 public:
-  Connection(const std::string &id, std::shared_ptr<erizo::ThreadPool> thread_pool, std::shared_ptr<erizo::IOThreadPool> io_thread_pool);
+  Connection(std::shared_ptr<erizo::ThreadPool> thread_pool, std::shared_ptr<erizo::IOThreadPool> io_thread_pool);
   ~Connection();
 
-  void init(const std::string &stream_id,
+  void setConnectionListener(ConnectionListener *listener) { listener_ = listener; }
+
+  void init(const std::string &agent_id,
+            const std::string &erizo_id,
+            const std::string &client_id,
+            const std::string &stream_id,
             const std::string &stream_label,
             bool is_publisher,
-            std::shared_ptr<AMQPHelper> amqp_helper,
-            const std::string &reply_to,
-            int corrid);
+            const std::string &reply_to);
+  void close();
+
   void notifyEvent(erizo::WebRTCEvent newEvent, const std::string &message, const std::string &stream_id = "") override;
 
-  bool setRemoteSdp(const std::string &sdp);
-  bool addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
-  void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> connection);
-  bool isReadyToSubscribe();
+  void setRemoteSdp(const std::string &sdp);
+  void addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
+  void addSubscriber(const std::string &stream_id, std::shared_ptr<erizo::MediaStream> connection);
   std::shared_ptr<erizo::MediaStream> getMediaStream();
 
-  void close();
 private:
   void initWebRtcConnection();
 
 private:
-  std::string id_;
   std::shared_ptr<erizo::ThreadPool> thread_pool_;
   std::shared_ptr<erizo::IOThreadPool> io_thread_pool_;
   bool init_;
-  bool ready_;
   bool is_publisher_;
+  std::string agent_id_;
+  std::string erizo_id_;
+  std::string client_id_;
   std::string stream_id_;
 
   std::string reply_to_;
-  int corrid_;
-  std::shared_ptr<AMQPHelper> amqp_helper_;
   std::shared_ptr<erizo::WebRtcConnection> webrtc_connection_;
   std::shared_ptr<erizo::OneToManyProcessor> otm_processor_;
   std::shared_ptr<erizo::MediaStream> media_stream_;
+  ConnectionListener *listener_;
 };
 
 #endif

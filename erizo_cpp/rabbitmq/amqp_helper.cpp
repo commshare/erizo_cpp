@@ -167,7 +167,7 @@ int AMQPHelper::init(const std::string &exchange,
     }
 
     run_ = true;
-    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([this, func]() {
+    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([&, func]() {
         while (run_)
         {
             amqp_rpc_reply_t res;

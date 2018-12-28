@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <boost/regex.hpp>
+
 class Utils
 {
   public:
@@ -37,7 +42,7 @@ class Utils
         }
 
         std::string path = buf;
-        int pos = path.find_last_of('/');
+        size_t pos = path.find_last_of('/');
         if (pos != path.npos)
             path = path.substr(0, pos);
 
@@ -47,6 +52,12 @@ class Utils
             return 1;
         }
         return 0;
+    }
+
+    static std::string getUUID()
+    {
+        boost::uuids::uuid uuid = boost::uuids::random_generator()();
+        return boost::uuids::to_string(uuid);
     }
 };
 
