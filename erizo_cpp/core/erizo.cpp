@@ -3,11 +3,12 @@
 
 DEFINE_LOGGER(Erizo, "Erizo");
 
-Erizo::Erizo() : init_(false),
-                 id_(""),
-                 amqp_uniquecast_(nullptr),
+Erizo::Erizo() : amqp_uniquecast_(nullptr),
                  thread_pool_(nullptr),
-                 io_thread_pool_(nullptr)
+                 io_thread_pool_(nullptr),
+                 agent_id_(""),
+                 erizo_id_(""),
+                 init_(false)
 {
 }
 
@@ -20,26 +21,28 @@ void Erizo::onEvent(const std::string &reply_to, const std::string &msg)
     amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
 }
 
-int Erizo::init(const std::string &id)
+int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
 {
     if (init_)
         return 0;
 
-    id_ = id;
+    agent_id_ = agent_id;
+    erizo_id_ = erizo_id;
+
     io_thread_pool_ = std::make_shared<erizo::IOThreadPool>(Config::getInstance()->erizo_io_worker_num_);
     io_thread_pool_->start();
 
     thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num_);
     thread_pool_->start();
 
-    std::string uniquecast_binding_key_ = "Erizo_" + id_;
+    std::string uniquecast_binding_key_ = "Erizo_" + erizo_id_;
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
     if (amqp_uniquecast_->init(Config::getInstance()->uniquecast_exchange_, uniquecast_binding_key_, [&](const std::string &msg) {
             Json::Value root;
             Json::Reader reader;
             if (!reader.parse(msg, root))
             {
-                ELOG_ERROR("Message parse failed");
+                ELOG_ERROR("message parse failed");
                 return;
             }
 
@@ -50,7 +53,7 @@ int Erizo::init(const std::string &id)
                 !root.isMember("data") ||
                 root["data"].type() != Json::objectValue)
             {
-                ELOG_ERROR("Message header format error");
+                ELOG_ERROR("message header invaild");
                 return;
             }
 
@@ -60,7 +63,7 @@ int Erizo::init(const std::string &id)
             if (!data.isMember("method") ||
                 data["method"].type() != Json::stringValue)
             {
-                ELOG_ERROR("Message data format error");
+                ELOG_ERROR("message data invaild");
                 return;
             }
 
@@ -81,7 +84,7 @@ int Erizo::init(const std::string &id)
 
             if (reply_data == Json::nullValue)
             {
-                ELOG_ERROR("Unknow message %s failed", msg);
+                ELOG_ERROR("handle message failed,dump-->%s", msg);
                 return;
             }
 
@@ -93,7 +96,7 @@ int Erizo::init(const std::string &id)
             amqp_uniquecast_->addCallback(reply_to, reply_to, reply_msg);
         }))
     {
-        ELOG_ERROR("AMQP uniquecast init failed");
+        ELOG_ERROR("amqp uniquecast init failed");
         return 1;
     }
 
@@ -105,45 +108,34 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-    {
         return Json::nullValue;
-    }
+
     if (root["args"].size() < 4)
-    {
         return Json::nullValue;
-    }
+
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
-        args[3].type() != Json::stringValue)// ||
-        //args[4].type() != Json::stringValue)
-    {
+        args[3].type() != Json::stringValue)
         return Json::nullValue;
-    }
+
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
- //   std::string subscribe_to = args[2].asString();
     std::string stream_label = args[2].asString();
     std::string reply_to = args[3].asString();
 
-    auto it = clients_.find(client_id);
-
-    if (it == clients_.end())
-        clients_[client_id] = std::make_shared<Client>(client_id);
-    std::shared_ptr<Client> client = clients_[client_id];
-    std::shared_ptr<Publisher> publisher = getPublisher(stream_id);
-    if (publisher == nullptr)
-    {
+    std::shared_ptr<Client> client = getOrCreateClient(client_id);
+    std::shared_ptr<Connection> pub_conn = findConn(stream_id);
+    if (pub_conn == nullptr)
         return Json::nullValue;
-    }
- 
-    std::shared_ptr<Subscriber> subscriber = std::make_shared<Subscriber>("1111111111", id_, client_id, stream_id, stream_label, reply_to, thread_pool_, io_thread_pool_);
-    subscriber->setConnectionListener(this);
- //   subscriber->setSubscribeTo(subscribe_to);
-    subscriber->init();
-    publisher->addSubscriber(stream_id, subscriber->getMediaStream());
-    client->addSubscriber(subscriber);
+
+    std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
+    sub_conn->setConnectionListener(this);
+    sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
+
+    pub_conn->addSubscriber(stream_id, sub_conn->getMediaStream());
+    client->subscribers.push_back(sub_conn);
 
     Json::Value data;
     data["ret"] = 0;
@@ -168,18 +160,14 @@ Json::Value Erizo::addPublisher(const Json::Value &root)
 
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
-    std::string stream_label = args[2].asString();
+    std::string label = args[2].asString();
     std::string reply_to = args[3].asString();
 
-    auto it = clients_.find(client_id);
-    if (it == clients_.end())
-        clients_[client_id] = std::make_shared<Client>(client_id);
-
-    std::shared_ptr<Client> client = clients_[client_id];
-    std::shared_ptr<Publisher> publisher = std::make_shared<Publisher>("1111111111", id_, client_id, stream_id, stream_label, reply_to, thread_pool_, io_thread_pool_);
-    publisher->setConnectionListener(this);
-    publisher->init();
-    client->addPublisher(publisher);
+    std::shared_ptr<Client> client = getOrCreateClient(client_id);
+    std::shared_ptr<Connection> conn = std::make_shared<Connection>();
+    conn->setConnectionListener(this);
+    conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
+    client->publishers.push_back(conn);
 
     Json::Value data;
     data["ret"] = 0;
@@ -202,152 +190,9 @@ void Erizo::close()
     io_thread_pool_ = nullptr;
 
     init_ = false;
-    id_ = "";
+    agent_id_ = "";
+    erizo_id_ = "";
 }
-
-// bool Erizo::processPublisherSignaling(const Json::Value &root)
-// {
-//     if (!checkMsgFmt(root) || !checkArgs(root))
-//         return true;
-
-//     std::string reply_to = root["replyTo"].asString();
-
-//     Json::Value args = root["args"];
-//     std::string client_id = args[0].asString();
-//     std::string stream_id = args[1].asString();
-//     Json::Value options = args[2];
-
-//     auto it = publishers_.find(stream_id);
-//     if (it != publishers_.end())
-//     {
-//         std::shared_ptr<Connection> connection = it->second;
-//         if (!options.isMember("type") || options["type"].type() != Json::stringValue)
-//         {
-//             ELOG_ERROR("processSignaling signaling type error");
-//             return true;
-//         }
-
-//         std::string signaling_type = options["type"].asString();
-//         if (!signaling_type.compare("offer"))
-//         {
-//             if (!options.isMember("sdp") || options["sdp"].type() != Json::stringValue)
-//             {
-//                 ELOG_ERROR("processSignaling sdp is null or type wrong");
-//                 return true;
-//             }
-
-//             std::string sdp = options["sdp"].asString();
-//             if (!connection->setRemoteSdp(sdp))
-//             {
-//                 ELOG_ERROR("processSignaling sdp parse failed");
-//                 return true;
-//             }
-//         }
-//         else if (!signaling_type.compare("candidate"))
-//         {
-//             if (!options.isMember("candidate") || options["candidate"].type() != Json::objectValue)
-//             {
-//                 ELOG_ERROR("processSignaling candidate is null or type wrong");
-//                 return true;
-//             }
-
-//             Json::Value candidate = options["candidate"];
-//             if (!candidate.isMember("sdpMLineIndex") ||
-//                 candidate["sdpMLineIndex"].type() != Json::uintValue ||
-//                 !candidate.isMember("sdpMid") ||
-//                 candidate["sdpMid"].type() != Json::stringValue ||
-//                 !candidate.isMember("candidate") ||
-//                 candidate["candidate"].type() != Json::stringValue)
-//             {
-//                 int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
-//                 std::string mid = candidate["sdpMid"].asString();
-//                 std::string candidate_str = candidate["candidate"].asString();
-//                 if (!connection->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
-//                 {
-//                     ELOG_ERROR("processSignaling candidate parse failed");
-//                     return true;
-//                 }
-//             }
-//         }
-//         return true;
-//     }
-//     return false;
-// }
-
-// bool Erizo::processSubscirberSignaling(const Json::Value &root)
-// {
-
-//     if (!checkMsgFmt(root) || !checkArgs(root))
-//         return true;
-
-//     std::string reply_to = root["replyTo"].asString();
-//     Json::Value args = root["args"];
-//     std::string client_id = args[0].asString();
-//     std::string stream_id = args[1].asString();
-//     Json::Value options = args[2];
-
-//     auto subscribers_it = subscribers_.find(client_id);
-//     if (subscribers_it != subscribers_.end())
-//     {
-//         std::map<std::string, std::shared_ptr<Connection>> &subscribe_streams = subscribers_it->second;
-//         auto subscriber_streams_it = subscribe_streams.find(stream_id);
-//         if (subscriber_streams_it != subscribe_streams.end())
-//         {
-//             std::shared_ptr<Connection> connection = subscriber_streams_it->second;
-//             if (!options.isMember("type") || options["type"].type() != Json::stringValue)
-//             {
-//                 ELOG_ERROR("processSignaling signaling type error");
-//                 return true;
-//             }
-
-//             std::string signaling_type = options["type"].asString();
-//             if (!signaling_type.compare("offer"))
-//             {
-//                 if (!options.isMember("sdp") || options["sdp"].type() != Json::stringValue)
-//                 {
-//                     ELOG_ERROR("processSignaling sdp is null or type wrong");
-//                     return true;
-//                 }
-
-//                 std::string sdp = options["sdp"].asString();
-//                 if (!connection->setRemoteSdp(sdp))
-//                 {
-//                     ELOG_ERROR("processSignaling sdp parse failed");
-//                     return true;
-//                 }
-//             }
-//             else if (!signaling_type.compare("candidate"))
-//             {
-//                 if (!options.isMember("candidate") || options["candidate"].type() != Json::objectValue)
-//                 {
-//                     ELOG_ERROR("processSignaling candidate is null or type wrong");
-//                     return true;
-//                 }
-
-//                 Json::Value candidate = options["candidate"];
-//                 if (!candidate.isMember("sdpMLineIndex") ||
-//                     candidate["sdpMLineIndex"].type() != Json::uintValue ||
-//                     !candidate.isMember("sdpMid") ||
-//                     candidate["sdpMid"].type() != Json::stringValue ||
-//                     !candidate.isMember("candidate") ||
-//                     candidate["candidate"].type() != Json::stringValue)
-//                 {
-//                     int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
-//                     std::string mid = candidate["sdpMid"].asString();
-//                     std::string candidate_str = candidate["candidate"].asString();
-//                     if (!connection->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
-//                     {
-//                         ELOG_ERROR("processSignaling candidate parse failed");
-//                         return true;
-//                     }
-//                 }
-//             }
-//             return true;
-//         }
-//     }
-
-//     return false;
-// }
 
 Json::Value Erizo::processSignaling(const Json::Value &root)
 {
@@ -363,54 +208,30 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     std::string stream_id = args[1].asString();
     Json::Value msg = args[2];
 
-    auto it = clients_.find(client_id);
-    if (it == clients_.end())
+    std::shared_ptr<Connection> conn = findConn(client_id, stream_id);
+    if (conn == nullptr)
         return Json::nullValue;
-
-    std::shared_ptr<Client> client = it->second;
-    std::shared_ptr<Stream> stream = client->getStream(stream_id);
-    if (stream == nullptr)
-    {
-        // stream = client->getSubscriber(stream_id);
-        // if (stream == nullptr)
-         printf("EEEEEEEEEEEEEEEEEEEEEEEXXXX\n");
-            return Json::nullValue;
-        
-    }
-
 
     if (!msg.isMember("type") ||
         msg["type"].type() != Json::stringValue)
-    {
-        ELOG_ERROR("Signaling message without type,dump:%s", msg);
         return Json::nullValue;
-    }
 
     std::string type = msg["type"].asString();
-
-   
     if (!type.compare("offer"))
     {
         if (!msg.isMember("sdp") ||
             msg["sdp"].type() != Json::stringValue)
-        {
-            ELOG_ERROR("Signaling message offer without sdp");
             return Json::nullValue;
-        }
 
         std::string sdp = msg["sdp"].asString();
-     
-        stream->setRemoteSdp(sdp);
+        conn->setRemoteSdp(sdp);
     }
     else if (!type.compare("candidate"))
     {
         if (!msg.isMember("candidate") ||
             msg["candidate"].type() != Json::objectValue)
-        {
-            ELOG_ERROR("Signaling message candidate format error");
             return Json::nullValue;
-        }
-
+    
         Json::Value candidate = msg["candidate"];
         if (!candidate.isMember("sdpMLineIndex") ||
             candidate["sdpMLineIndex"].type() != Json::uintValue ||
@@ -422,11 +243,70 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
             std::string mid = candidate["sdpMid"].asString();
             std::string candidate_str = candidate["candidate"].asString();
-            stream->addRemoteCandidate(mid, sdp_mine_index, candidate_str);
+            conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str);
         }
     }
 
     Json::Value data;
     data["ret"] = 0;
     return data;
+}
+
+std::shared_ptr<Connection> Erizo::findConn(const std::string &client_id, const std::string &stream_id)
+{
+    auto it = clients_.find(client_id);
+    if (it != clients_.end())
+    {
+        {
+            std::shared_ptr<Client> client = it->second;
+            std::vector<std::shared_ptr<Connection>> &publishers = client->publishers;
+            auto itc = std::find_if(publishers.begin(), publishers.end(), [&](std::shared_ptr<Connection> connection) {
+                if (!connection->getStreamId().compare(stream_id))
+                    return true;
+                return false;
+            });
+            if (itc != publishers.end())
+                return *itc;
+        }
+        {
+            std::shared_ptr<Client> client = it->second;
+            std::vector<std::shared_ptr<Connection>> &subscribers = client->subscribers;
+            auto itc = std::find_if(subscribers.begin(), subscribers.end(), [&](std::shared_ptr<Connection> connection) {
+                if (!connection->getStreamId().compare(stream_id))
+                    return true;
+                return false;
+            });
+            if (itc != subscribers.end())
+                return *itc;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<Connection> Erizo::findConn(const std::string &stream_id)
+{
+    for (auto it = clients_.begin(); it != clients_.end(); it++)
+    {
+        std::shared_ptr<Client> client = it->second;
+        std::vector<std::shared_ptr<Connection>> &publishers = client->publishers;
+        auto itc = std::find_if(publishers.begin(), publishers.end(), [&](std::shared_ptr<Connection> connection) {
+            if (!connection->getStreamId().compare(stream_id))
+                return true;
+            return false;
+        });
+        if (itc != publishers.end())
+            return *itc;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<Client> Erizo::getOrCreateClient(const std::string &client_id)
+{
+    auto it = clients_.find(client_id);
+    if (it == clients_.end())
+    {
+        clients_[client_id] = std::make_shared<Client>();
+        clients_[client_id]->id = client_id;
+    }
+    return clients_[client_id];
 }

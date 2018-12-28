@@ -8,27 +8,49 @@
 
 DEFINE_LOGGER(Connection, "Connection");
 
-Connection::Connection(std::shared_ptr<erizo::ThreadPool> thread_pool, std::shared_ptr<erizo::IOThreadPool> io_thread_pool) : thread_pool_(thread_pool),
-                                                                                                                              io_thread_pool_(io_thread_pool),
-                                                                                                                              init_(false),
-                                                                                                                              is_publisher_(false),
-                                                                                                                              stream_id_(""),
-                                                                                                                              reply_to_(""),
-                                                                                                                              webrtc_connection_(nullptr),
-                                                                                                                              otm_processor_(nullptr),
-                                                                                                                              media_stream_(nullptr),
-                                                                                                                              listener_(nullptr)
+Connection::Connection() : webrtc_connection_(nullptr),
+                           otm_processor_(nullptr),
+                           media_stream_(nullptr),
+                           listener_(nullptr),
+                           agent_id_(""),
+                           erizo_id_(""),
+                           client_id_(""),
+                           stream_id_(""),
+                           is_publisher_(false),
+                           reply_to_(""),
+                           thread_pool_(nullptr),
+                           io_thread_pool_(nullptr),
+                           init_(false)
 
 {
 }
 
 Connection::~Connection() {}
 
-void Connection::initWebRtcConnection()
+void Connection::init(const std::string &agent_id,
+                      const std::string &erizo_id,
+                      const std::string &client_id,
+                      const std::string &stream_id,
+                      const std::string &label,
+                      bool is_publisher,
+                      const std::string &reply_to,
+                      std::shared_ptr<erizo::ThreadPool> thread_pool, std::shared_ptr<erizo::IOThreadPool> io_thread_pool)
 {
+    if (init_)
+        return;
 
-    std::shared_ptr<erizo::Worker> worker = thread_pool_->getLessUsedWorker();
-    std::shared_ptr<erizo::IOWorker> io_worker = io_thread_pool_->getLessUsedIOWorker();
+    agent_id_ = agent_id;
+    erizo_id_ = erizo_id;
+    client_id_ = client_id;
+    stream_id_ = stream_id;
+    is_publisher_ = is_publisher;
+    reply_to_ = reply_to;
+
+    thread_pool_ = thread_pool;
+    io_thread_pool_ = io_thread_pool;
+
+    std::shared_ptr<erizo::Worker> wc_worker = thread_pool_->getLessUsedWorker();
+    std::shared_ptr<erizo::IOWorker> wc_io_worker = io_thread_pool_->getLessUsedIOWorker();
 
     erizo::IceConfig ice_config;
     ice_config.stun_server = Config::getInstance()->stun_server_;
@@ -42,33 +64,10 @@ void Connection::initWebRtcConnection()
     ice_config.turn_pass = Config::getInstance()->turn_password_;
     ice_config.network_interface = Config::getInstance()->network_interface_;
 
-    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, Utils::getUUID(), ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
-}
+    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(wc_worker, wc_io_worker, Utils::getUUID(), ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
 
-void Connection::init(const std::string &agent_id,
-                      const std::string &erizo_id,
-                      const std::string &client_id,
-                      const std::string &stream_id,
-                      const std::string &stream_label,
-                      bool is_publisher,
-                      const std::string &reply_to)
-{
-    if (init_)
-    {
-        ELOG_WARN("Connection duplicate initialize!!!");
-        return;
-    }
-
-    agent_id_ = agent_id;
-    erizo_id_ = erizo_id;
-    client_id_ = client_id;
-    stream_id_ = stream_id;
-    is_publisher_ = is_publisher;
-    reply_to_ = reply_to;
-
-    initWebRtcConnection();
-    std::shared_ptr<erizo::Worker> worker = thread_pool_->getLessUsedWorker();
-    media_stream_ = std::make_shared<erizo::MediaStream>(worker, webrtc_connection_, stream_id, stream_label, is_publisher_);
+    std::shared_ptr<erizo::Worker> ms_worker = thread_pool_->getLessUsedWorker();
+    media_stream_ = std::make_shared<erizo::MediaStream>(ms_worker, webrtc_connection_, stream_id, label, is_publisher_);
 
     if (is_publisher_)
     {
@@ -81,52 +80,50 @@ void Connection::init(const std::string &agent_id,
 
     webrtc_connection_->addMediaStream(media_stream_);
     webrtc_connection_->init();
-
     init_ = true;
 }
 
 void Connection::close()
 {
     if (!init_)
-    {
-        ELOG_WARN("Connection didn't initialize,can't close!!!");
         return;
-    }
+
     webrtc_connection_->close();
+    webrtc_connection_.reset();
+    webrtc_connection_ = nullptr;
+
     if (is_publisher_)
     {
         otm_processor_->close();
+        otm_processor_.reset();
+        otm_processor_ = nullptr;
     }
+
     media_stream_->close();
-    thread_pool_.reset();
-    thread_pool_ = nullptr;
-    io_thread_pool_.reset();
-    io_thread_pool_ = nullptr;
-    init_ = false;
-    is_publisher_ = false;
+    media_stream_.reset();
+    media_stream_ = nullptr;
+
+    listener_ = nullptr;
+
     agent_id_ = "";
     erizo_id_ = "";
     client_id_ = "";
     stream_id_ = "";
+    is_publisher_ = false;
     reply_to_ = "";
-    webrtc_connection_.reset();
-    webrtc_connection_ = nullptr;
-    otm_processor_.reset();
-    otm_processor_ = nullptr;
-    media_stream_.reset();
-    media_stream_ = nullptr;
-    listener_ = nullptr;
+
+    thread_pool_.reset();
+    thread_pool_ = nullptr;
+
+    io_thread_pool_.reset();
+    io_thread_pool_ = nullptr;
+
+    init_ = false;
 }
 
 void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &message, const std::string &stream_id)
 {
-    //      CONN_INITIAL = 101, CONN_STARTED = 102, CONN_GATHERED = 103, CONN_READY = 104, CONN_FINISHED = 105,
-    //   CONN_CANDIDATE = 201, CONN_SDP = 202, CONN_SDP_PROCESSED = 203,
-    //   CONN_FAILED = 500
-
-    ELOG_INFO("-------->stream:%s    Connection:event:%d", stream_id_, newEvent);
     Json::Value data = Json::nullValue;
-
     switch (newEvent)
     {
     case erizo::CONN_INITIAL:
@@ -138,9 +135,13 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         break;
     case erizo::CONN_SDP_PROCESSED:
         if (is_publisher_)
+        {
             data["type"] = "publisher_answer";
+        }
         else
+        {
             data["type"] = "subscriber_answer";
+        }
         data["agentId"] = agent_id_;
         data["erizoId"] = erizo_id_;
         data["streamId"] = stream_id_;
@@ -178,9 +179,10 @@ void Connection::addRemoteCandidate(const std::string &mid, int sdp_mine_index, 
     webrtc_connection_->addRemoteCandidate(mid, sdp_mine_index, sdp);
 }
 
-void Connection::addSubscriber(const std::string &stream_id, std::shared_ptr<erizo::MediaStream> media_stream)
+void Connection::addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream)
 {
-    otm_processor_->addSubscriber(media_stream, stream_id);
+    std::string subscriber_id = (client_id + "_") + stream_id_;
+    otm_processor_->addSubscriber(media_stream, subscriber_id);
 }
 
 std::shared_ptr<erizo::MediaStream> Connection::getMediaStream()

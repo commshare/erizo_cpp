@@ -25,7 +25,7 @@ class Connection : public erizo::WebRtcConnectionEventListener
   DECLARE_LOGGER();
 
 public:
-  Connection(std::shared_ptr<erizo::ThreadPool> thread_pool, std::shared_ptr<erizo::IOThreadPool> io_thread_pool);
+  Connection();
   ~Connection();
 
   void setConnectionListener(ConnectionListener *listener) { listener_ = listener; }
@@ -34,36 +34,41 @@ public:
             const std::string &erizo_id,
             const std::string &client_id,
             const std::string &stream_id,
-            const std::string &stream_label,
+            const std::string &label,
             bool is_publisher,
-            const std::string &reply_to);
+            const std::string &reply_to,
+            std::shared_ptr<erizo::ThreadPool> thread_pool,
+            std::shared_ptr<erizo::IOThreadPool> io_thread_pool);
   void close();
 
   void notifyEvent(erizo::WebRTCEvent newEvent, const std::string &message, const std::string &stream_id = "") override;
-
   void setRemoteSdp(const std::string &sdp);
   void addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
-  void addSubscriber(const std::string &stream_id, std::shared_ptr<erizo::MediaStream> connection);
+  void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> connection);
   std::shared_ptr<erizo::MediaStream> getMediaStream();
+  
+  const std::string &getStreamId()
+  {
+    return stream_id_;
+  }
 
 private:
-  void initWebRtcConnection();
-
-private:
-  std::shared_ptr<erizo::ThreadPool> thread_pool_;
-  std::shared_ptr<erizo::IOThreadPool> io_thread_pool_;
-  bool init_;
-  bool is_publisher_;
-  std::string agent_id_;
-  std::string erizo_id_;
-  std::string client_id_;
-  std::string stream_id_;
-
-  std::string reply_to_;
   std::shared_ptr<erizo::WebRtcConnection> webrtc_connection_;
   std::shared_ptr<erizo::OneToManyProcessor> otm_processor_;
   std::shared_ptr<erizo::MediaStream> media_stream_;
   ConnectionListener *listener_;
+
+  std::string agent_id_;
+  std::string erizo_id_;
+  std::string client_id_;
+  std::string stream_id_;
+  bool is_publisher_;
+  std::string reply_to_;
+
+  std::shared_ptr<erizo::ThreadPool> thread_pool_;
+  std::shared_ptr<erizo::IOThreadPool> io_thread_pool_;
+
+  bool init_;
 };
 
 #endif

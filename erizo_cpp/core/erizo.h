@@ -20,7 +20,7 @@ public:
   Erizo();
   ~Erizo();
 
-  int init(const std::string &id);
+  int init(const std::string &agent_id, const std::string &erizo_id);
   void close();
   void onEvent(const std::string &reply_to, const std::string &msg) override;
 
@@ -29,29 +29,19 @@ private:
   Json::Value addSubscriber(const Json::Value &root);
   Json::Value processSignaling(const Json::Value &root);
 
-  // bool processPublisherSignaling(const Json::Value &root);
-  // bool processSubscirberSignaling(const Json::Value &root);
-
-  std::shared_ptr<Publisher> getPublisher(const std::string &publisher_id)
-  {
-    std::shared_ptr<Publisher> publisher;
-    for (auto it = clients_.begin(); it != clients_.end(); it++)
-    {
-      publisher = it->second->getPublisher(publisher_id);
-      if (publisher != nullptr)
-        return publisher;
-    }
-    return nullptr;
-  }
+  std::shared_ptr<Connection> findConn(const std::string &client_id, const std::string &stream_id);
+  std::shared_ptr<Connection> findConn(const std::string &stream_id);
+  std::shared_ptr<Client> getOrCreateClient(const std::string &client_id);
 
 private:
-  bool init_;
-  std::string id_;
-
   std::shared_ptr<AMQPHelper> amqp_uniquecast_;
   std::shared_ptr<erizo::ThreadPool> thread_pool_;
   std::shared_ptr<erizo::IOThreadPool> io_thread_pool_;
   std::map<std::string, std::shared_ptr<Client>> clients_;
+
+  std::string agent_id_;
+  std::string erizo_id_;
+  bool init_;
 };
 
 #endif
