@@ -16,11 +16,11 @@ void signal_handler(int signo)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
-    {
-        printf("Usage:%s [erizoID]\n", argv[0]);
-        return 0;
-    }
+    // if (argc != 2)
+    // {
+    //     printf("Usage:%s [erizoID]\n", argv[0]);
+    //     return 0;
+    // }
 
     if (Utils::initPath())
     {
@@ -37,8 +37,9 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler);
     signal(SIGINT, signal_handler);
 
-    ez.init("1111111111",argv[1]);
 
+  //  ez.init("1111111111",argv[1]);
+ez.init("1111111111","2222222222");
     while (1)
         usleep(0);
 }

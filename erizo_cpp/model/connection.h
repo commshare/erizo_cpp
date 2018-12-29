@@ -42,8 +42,8 @@ public:
   void close();
 
   void notifyEvent(erizo::WebRTCEvent newEvent, const std::string &message, const std::string &stream_id = "") override;
-  void setRemoteSdp(const std::string &sdp);
-  void addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
+  int setRemoteSdp(const std::string &sdp);
+  int addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
   void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> connection);
   std::shared_ptr<erizo::MediaStream> getMediaStream();
   

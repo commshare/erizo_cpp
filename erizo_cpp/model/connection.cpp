@@ -169,14 +169,18 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
     }
 };
 
-void Connection::setRemoteSdp(const std::string &sdp)
+int Connection::setRemoteSdp(const std::string &sdp)
 {
-    webrtc_connection_->setRemoteSdp(sdp, stream_id_);
+    if (!webrtc_connection_->setRemoteSdp(sdp, stream_id_))
+        return 1;
+    return 0;
 }
 
-void Connection::addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp)
+int Connection::addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp)
 {
-    webrtc_connection_->addRemoteCandidate(mid, sdp_mine_index, sdp);
+    if (!webrtc_connection_->addRemoteCandidate(mid, sdp_mine_index, sdp))
+        return 1;
+    return 0;
 }
 
 void Connection::addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream)

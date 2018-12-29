@@ -228,7 +228,8 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             return Json::nullValue;
 
         std::string sdp = msg["sdp"].asString();
-        conn->setRemoteSdp(sdp);
+        if (conn->setRemoteSdp(sdp))
+            return Json::nullValue;
     }
     else if (!type.compare("candidate"))
     {
@@ -247,7 +248,8 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
             std::string mid = candidate["sdpMid"].asString();
             std::string candidate_str = candidate["candidate"].asString();
-            conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str);
+            if (conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
+                return Json::nullValue;
         }
     }
 

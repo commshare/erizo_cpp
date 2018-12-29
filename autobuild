@@ -10,3 +10,4 @@ make install
 cd ${CURRENT_DIR}
 cp ./log4cxx.properties ./bin
 cp ./erizo_config.json ./bin
+./bin/erizo_cpp 
