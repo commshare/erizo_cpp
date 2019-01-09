@@ -1,6 +1,6 @@
 {
     "rabbitmq": {
-        "host": "localhost",
+        "host": "172.19.5.28",
         "port": 5672,
         "username": "linmin",
         "password": "linmin",
