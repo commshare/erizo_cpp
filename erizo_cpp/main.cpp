@@ -37,9 +37,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler);
     signal(SIGINT, signal_handler);
 
-
-  //  ez.init("1111111111",argv[1]);
-ez.init("1111111111","2222222222");
-    while (1)
-        usleep(0);
+    //  ez.init("1111111111",argv[1]);
+    ez.init("1111111111", "2222222222");
+    sleep(100000);
 }

@@ -45,8 +45,9 @@ public:
   int setRemoteSdp(const std::string &sdp);
   int addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
   void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> connection);
+  void removeSubscriber(const std::string &client);
   std::shared_ptr<erizo::MediaStream> getMediaStream();
-  
+
   const std::string &getStreamId()
   {
     return stream_id_;

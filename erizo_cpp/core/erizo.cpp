@@ -79,7 +79,16 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
             }
             else if (!method.compare("processSignaling"))
             {
-                reply_data = processSignaling(data);
+                processSignaling(data);
+                return;
+            }
+            else if (!method.compare("removeSubscriber"))
+            {
+                reply_data = removeSubscriber(data);
+            }
+            else if (!method.compare("removePublisher"))
+            {
+                reply_data = removePublisher(data);
             }
 
             if (reply_data == Json::nullValue)
@@ -135,7 +144,40 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
     sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
 
     pub_conn->addSubscriber(client_id, sub_conn->getMediaStream());
-    client->subscribers.push_back(sub_conn);
+    addSubscriber(client, stream_id, sub_conn);
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::removeSubscriber(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 2)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue)
+        return Json::nullValue;
+
+    std::string client_id = args[0].asString();
+    std::string stream_id = args[1].asString();
+
+    std::shared_ptr<Connection> pub_conn = getPublisher(stream_id);
+    if (pub_conn != nullptr)
+        pub_conn->removeSubscriber(client_id);
+
+    std::shared_ptr<Client> client = getOrCreateClient(client_id);
+    std::shared_ptr<Connection> sub_conn = getSubscriber(client, stream_id);
+    if (sub_conn != nullptr)
+    {
+        removeSubscriber(client, stream_id);
+        sub_conn->close();
+    }
 
     Json::Value data;
     data["ret"] = 0;
@@ -167,7 +209,35 @@ Json::Value Erizo::addPublisher(const Json::Value &root)
     std::shared_ptr<Connection> conn = std::make_shared<Connection>();
     conn->setConnectionListener(this);
     conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
-    client->publishers.push_back(conn);
+    addPublisher(client, stream_id, conn);
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::removePublisher(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 2)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue)
+        return Json::nullValue;
+    std::string client_id = args[0].asString();
+    std::string stream_id = args[1].asString();
+
+    std::shared_ptr<Client> client = getOrCreateClient(client_id);
+    std::shared_ptr<Connection> conn = getPublisher(client, stream_id);
+    if (conn != nullptr)
+    {
+        removePublisher(client, stream_id);
+        conn->close();
+    }
 
     Json::Value data;
     data["ret"] = 0;
@@ -208,11 +278,11 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     std::string stream_id = args[1].asString();
     Json::Value msg = args[2];
 
-    std::shared_ptr<Client> client = getClient(client_id);
+    std::shared_ptr<Client> client = getOrCreateClient(client_id);
     if (client == nullptr)
         return Json::nullValue;
 
-    std::shared_ptr<Connection> conn = client->getConnection(stream_id);
+    std::shared_ptr<Connection> conn = getConnection(client, stream_id);
     if (conn == nullptr)
         return Json::nullValue;
 
@@ -262,15 +332,64 @@ std::shared_ptr<Connection> Erizo::getPublisher(const std::string &stream_id)
 {
     for (auto it = clients_.begin(); it != clients_.end(); it++)
     {
-        std::vector<std::shared_ptr<Connection>> &publishers = it->second->publishers;
-        auto itc = std::find_if(publishers.begin(), publishers.end(), [&](std::shared_ptr<Connection> connection) {
-            if (!connection->getStreamId().compare(stream_id))
-                return true;
-            return false;
-        });
-        if (itc != publishers.end())
-            return *itc;
+        auto itc = it->second->publishers.find(stream_id);
+        if (itc != it->second->publishers.end())
+            return itc->second;
     }
+    return nullptr;
+}
+
+std::shared_ptr<Connection> Erizo::getPublisher(std::shared_ptr<Client> client, const std::string &stream_id)
+{
+    auto it = client->publishers.find(stream_id);
+    if (it != client->publishers.end())
+        return it->second;
+
+    return nullptr;
+}
+
+void Erizo::addPublisher(std::shared_ptr<Client> client, const std::string &stream_id, std::shared_ptr<Connection> conn)
+{
+    client->publishers[stream_id] = conn;
+}
+
+void Erizo::addSubscriber(std::shared_ptr<Client> client, const std::string &stream_id, std::shared_ptr<Connection> conn)
+{
+    client->subscribers[stream_id] = conn;
+}
+
+void Erizo::removePublisher(std::shared_ptr<Client> client, const std::string &stream_id)
+{
+    client->publishers.erase(stream_id);
+}
+
+void Erizo::removeSubscriber(std::shared_ptr<Client> client, const std::string &stream_id)
+{
+    client->subscribers.erase(stream_id);
+}
+
+std::shared_ptr<Connection> Erizo::getSubscriber(std::shared_ptr<Client> client, const std::string &stream_id)
+{
+    auto it = client->subscribers.find(stream_id);
+    if (it != client->subscribers.end())
+        return it->second;
+
+    return nullptr;
+}
+
+std::shared_ptr<Connection> Erizo::getConnection(std::shared_ptr<Client> client, const std::string &stream_id)
+{
+    {
+        auto it = client->publishers.find(stream_id);
+        if (it != client->publishers.end())
+            return it->second;
+    }
+    {
+        auto it = client->subscribers.find(stream_id);
+        if (it != client->subscribers.end())
+            return it->second;
+    }
+
     return nullptr;
 }
 
@@ -283,12 +402,4 @@ std::shared_ptr<Client> Erizo::getOrCreateClient(const std::string &client_id)
         clients_[client_id]->id = client_id;
     }
     return clients_[client_id];
-}
-
-std::shared_ptr<Client> Erizo::getClient(const std::string &client_id)
-{
-    auto it = clients_.find(client_id);
-    if (it != clients_.end())
-        return it->second;
-    return nullptr;
 }

@@ -195,16 +195,13 @@ int AMQPHelper::init(const std::string &exchange,
         {
             std::unique_lock<std::mutex> lock(mux_);
 
-            if (!queue_.empty())
+            while (!queue_.empty())
             {
                 AMQPData data = queue_.front();
                 queue_.pop();
                 callback(data.exchange, data.queuename, data.binding_key, data.msg);
             }
-            else
-            {
-                cond_.wait(lock);
-            }
+            cond_.wait(lock);
         }
     }));
 

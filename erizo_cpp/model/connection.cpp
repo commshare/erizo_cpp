@@ -49,8 +49,8 @@ void Connection::init(const std::string &agent_id,
     thread_pool_ = thread_pool;
     io_thread_pool_ = io_thread_pool;
 
-    std::shared_ptr<erizo::Worker> wc_worker = thread_pool_->getLessUsedWorker();
-    std::shared_ptr<erizo::IOWorker> wc_io_worker = io_thread_pool_->getLessUsedIOWorker();
+    std::shared_ptr<erizo::Worker> worker = thread_pool_->getLessUsedWorker();
+    std::shared_ptr<erizo::IOWorker> io_worker = io_thread_pool_->getLessUsedIOWorker();
 
     erizo::IceConfig ice_config;
     ice_config.stun_server = Config::getInstance()->stun_server_;
@@ -64,7 +64,7 @@ void Connection::init(const std::string &agent_id,
     ice_config.turn_pass = Config::getInstance()->turn_password_;
     ice_config.network_interface = Config::getInstance()->network_interface_;
 
-    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(wc_worker, wc_io_worker, Utils::getUUID(), ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
+    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, Utils::getUUID(), ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
 
     std::shared_ptr<erizo::Worker> ms_worker = thread_pool_->getLessUsedWorker();
     media_stream_ = std::make_shared<erizo::MediaStream>(ms_worker, webrtc_connection_, stream_id, label, is_publisher_);
@@ -88,6 +88,7 @@ void Connection::close()
     if (!init_)
         return;
 
+    webrtc_connection_->setWebRtcConnectionEventListener(nullptr);
     webrtc_connection_->close();
     webrtc_connection_.reset();
     webrtc_connection_ = nullptr;
@@ -98,7 +99,10 @@ void Connection::close()
         otm_processor_.reset();
         otm_processor_ = nullptr;
     }
-
+    media_stream_->setFeedbackSink(nullptr);
+    media_stream_->setAudioSink(nullptr);
+    media_stream_->setVideoSink(nullptr);
+    media_stream_->setEventSink(nullptr);
     media_stream_->close();
     media_stream_.reset();
     media_stream_ = nullptr;
@@ -165,28 +169,41 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         Json::Value reply;
         reply["data"] = data;
         std::string msg = writer.write(reply);
-        listener_->onEvent(reply_to_, msg);
+        if (listener_ != nullptr)
+            listener_->onEvent(reply_to_, msg);
     }
-};
+}
 
 int Connection::setRemoteSdp(const std::string &sdp)
 {
-    if (!webrtc_connection_->setRemoteSdp(sdp, stream_id_))
+    if (webrtc_connection_ == nullptr || !webrtc_connection_->setRemoteSdp(sdp, stream_id_))
         return 1;
     return 0;
 }
 
 int Connection::addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp)
 {
-    if (!webrtc_connection_->addRemoteCandidate(mid, sdp_mine_index, sdp))
+    if (webrtc_connection_ == nullptr || !webrtc_connection_->addRemoteCandidate(mid, sdp_mine_index, sdp))
         return 1;
     return 0;
 }
 
 void Connection::addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream)
 {
-    std::string subscriber_id = (client_id + "_") + stream_id_;
-    otm_processor_->addSubscriber(media_stream, subscriber_id);
+    if (otm_processor_ != nullptr)
+    {
+        std::string subscriber_id = (client_id + "_") + stream_id_;
+        otm_processor_->addSubscriber(media_stream, subscriber_id);
+    }
+}
+
+void Connection::removeSubscriber(const std::string &client_id)
+{
+    if (otm_processor_ != nullptr)
+    {
+        std::string subscriber_id = (client_id + "_") + stream_id_;
+        otm_processor_->removeSubscriber(subscriber_id);
+    }
 }
 
 std::shared_ptr<erizo::MediaStream> Connection::getMediaStream()
