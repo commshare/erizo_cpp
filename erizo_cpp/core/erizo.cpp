@@ -35,7 +35,7 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
     thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num_);
     thread_pool_->start();
 
-    std::string uniquecast_binding_key_ = "Erizo_" + erizo_id_;
+    std::string uniquecast_binding_key_ = erizo_id_;
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
     if (amqp_uniquecast_->init(Config::getInstance()->uniquecast_exchange_, uniquecast_binding_key_, [&](const std::string &msg) {
             Json::Value root;
@@ -90,6 +90,9 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
             {
                 reply_data = removePublisher(data);
             }
+
+            if (corrid == -1)
+                return;
 
             if (reply_data == Json::nullValue)
             {

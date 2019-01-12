@@ -16,11 +16,11 @@ void signal_handler(int signo)
 
 int main(int argc, char *argv[])
 {
-    // if (argc != 2)
-    // {
-    //     printf("Usage:%s [erizoID]\n", argv[0]);
-    //     return 0;
-    // }
+    if (argc != 3)
+    {
+        printf("Usage:%s [agentID] [erizoID]\n", argv[0]);
+        return 0;
+    }
 
     if (Utils::initPath())
     {
@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (Config::getInstance()->init("./erizo_config.json"))
+    if (Config::getInstance()->init("erizo_config.json"))
     {
         printf("Config initialize failed\n");
         return 1;
@@ -38,6 +38,6 @@ int main(int argc, char *argv[])
     signal(SIGINT, signal_handler);
 
     //  ez.init("1111111111",argv[1]);
-    ez.init("1111111111", "2222222222");
+    ez.init(argv[1], argv[2]);
     sleep(100000);
 }
