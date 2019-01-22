@@ -30,11 +30,9 @@ Config::Config()
     uniquecast_exchange_ = "erizo_uniquecast_exchange";
     boardcast_exchange_ = "erizo_boardcast_exchange";
 
-    bridge_ip_ = "172.19.5.28";
-    bridge_port_ = 50000;
-
     erizo_worker_num_ = 5;
     erizo_io_worker_num_ = 5;
+    bridge_io_worker_num_ = 5;
 
     stun_server_ = "stun:stun.l.google.com";
     stun_port_ = 19302;
@@ -71,18 +69,6 @@ int Config::initConfig(const Json::Value &root)
         rabbitmq["uniquecast_exchange"].type() != Json::stringValue)
     {
         ELOG_ERROR("Rabbitmq config check error");
-        return 1;
-    }
-
-    Json::Value bridge = root["bridge"];
-    if (!root.isMember("bridge") ||
-        bridge.type() != Json::objectValue ||
-        !bridge.isMember("ip") ||
-        bridge["ip"].type() != Json::stringValue ||
-        !bridge.isMember("port") ||
-        bridge["port"].type() != Json::intValue)
-    {
-        ELOG_ERROR("Bridge config check error");
         return 1;
     }
 
@@ -151,8 +137,6 @@ int Config::initConfig(const Json::Value &root)
     uniquecast_exchange_ = rabbitmq["uniquecast_exchange"].asString();
     boardcast_exchange_ = rabbitmq["boardcast_exchange"].asString();
 
-    bridge_ip_ = bridge["ip"].asString();
-    bridge_port_ = bridge["port"].asInt();
     stun_server_ = stun["host"].asString();
     stun_port_ = stun["port"].asInt();
     turn_server_ = turn["host"].asString();

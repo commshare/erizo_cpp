@@ -35,13 +35,10 @@ public:
   std::string uniquecast_exchange_;
   std::string boardcast_exchange_;
 
-  // Bridge config
-  std::string bridge_ip_;
-  unsigned short bridge_port_;
-
   // Erizo threadpool config
   int erizo_worker_num_;
   int erizo_io_worker_num_;
+  int bridge_io_worker_num_;
 
   // Erizo libnice config
   // stun

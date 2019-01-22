@@ -16,9 +16,9 @@ void signal_handler(int signo)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3)
+    if (argc != 5)
     {
-        printf("Usage:%s [agentID] [erizoID]\n", argv[0]);
+        printf("Usage:%s [agentID] [erizoID] [bridgeIP] [bridgePort]\n", argv[0]);
         return 0;
     }
 
@@ -36,8 +36,7 @@ int main(int argc, char *argv[])
 
     signal(SIGTERM, signal_handler);
     signal(SIGINT, signal_handler);
-
-    //  ez.init("1111111111",argv[1]);
-    ez.init(argv[1], argv[2]);
+    
+    ez.init(argv[1], argv[2], argv[3], atoi(argv[4]));
     sleep(100000);
 }

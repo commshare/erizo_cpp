@@ -8,6 +8,7 @@
 #include <logger.h>
 #include <WebRtcConnection.h>
 #include <MediaStream.h>
+#include <BridgeMediaStream.h>
 #include <OneToManyProcessor.h>
 #include <thread/ThreadPool.h>
 #include <thread/IOThreadPool.h>
@@ -44,7 +45,8 @@ public:
   void notifyEvent(erizo::WebRTCEvent newEvent, const std::string &message, const std::string &stream_id = "") override;
   int setRemoteSdp(const std::string &sdp);
   int addRemoteCandidate(const std::string &mid, int sdp_mine_index, const std::string &sdp);
-  void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> connection);
+  void addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream);
+  void addSubscriber(const std::string &bridge_stream_id, std::shared_ptr<erizo::BridgeMediaStream> bridge_media_stream);
   void removeSubscriber(const std::string &client);
   std::shared_ptr<erizo::MediaStream> getMediaStream();
 
@@ -63,6 +65,7 @@ private:
   std::string erizo_id_;
   std::string client_id_;
   std::string stream_id_;
+  std::string label_;
   bool is_publisher_;
   std::string reply_to_;
 

@@ -7,10 +7,6 @@
         "uniquecast_exchange": "erizo_uniquecast_exchange",
         "boardcast_exchange": "erizo_boardcast_exchange"
     },
-    "bridge": {
-        "ip": "172.19.5.28",
-        "port": 50000
-    },
     "ice": {
         "stun": {
             "host": "stun:stun.l.google.com",
@@ -30,7 +26,7 @@
     },
     "media": {
         "audio_codec": "opus",
-        "video_codec": "vp8"
+        "video_codec": "h264"
     },
     "mediaType": [
         {

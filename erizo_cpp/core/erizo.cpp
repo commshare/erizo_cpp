@@ -1,6 +1,9 @@
 #include "erizo.h"
 #include "common/config.h"
 
+#include <dtls/DtlsSocket.h>
+#include <BridgeIO.h>
+
 DEFINE_LOGGER(Erizo, "Erizo");
 
 Erizo::Erizo() : amqp_uniquecast_(nullptr),
@@ -21,7 +24,7 @@ void Erizo::onEvent(const std::string &reply_to, const std::string &msg)
     amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
 }
 
-int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
+int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const std::string &ip, uint16_t port)
 {
     if (init_)
         return 0;
@@ -34,6 +37,14 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
 
     thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num_);
     thread_pool_->start();
+
+    dtls::DtlsSocketContext::globalInit();
+
+    if (erizo::BridgeIO::getInstance()->init(ip, port, Config::getInstance()->bridge_io_worker_num_))
+    {
+        ELOG_ERROR("bridge-io init failed");
+        return 1;
+    }
 
     std::string uniquecast_binding_key_ = erizo_id_;
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
@@ -90,6 +101,14 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id)
             {
                 reply_data = removePublisher(data);
             }
+            else if (!method.compare("addVirtualPublisher"))
+            {
+                reply_data = addVirtualPublisher(data);
+            }
+            else if (!method.compare("addVirtualSubscriber"))
+            {
+                reply_data = addVirtualSubscriber(data);
+            }
 
             if (corrid == -1)
                 return;
@@ -139,15 +158,32 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     std::shared_ptr<Connection> pub_conn = getPublisherConn(stream_id);
-    if (pub_conn == nullptr)
-        return Json::nullValue;
+    if (pub_conn != nullptr)
+    {
+        std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
+        sub_conn->setConnectionListener(this);
+        sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
 
-    std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
-    sub_conn->setConnectionListener(this);
-    sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
+        pub_conn->addSubscriber(client_id, sub_conn->getMediaStream());
+        client->subscribers[stream_id] = sub_conn;
+    }
+    else
+    {
+        std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(stream_id);
+        if (bridge_conn != nullptr)
+        {
+            std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
+            sub_conn->setConnectionListener(this);
+            sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
 
-    pub_conn->addSubscriber(client_id, sub_conn->getMediaStream());
-    addSubscriberConn(client, stream_id, sub_conn);
+            bridge_conn->addSubscriber(client_id, sub_conn->getMediaStream());
+            client->subscribers[stream_id] = sub_conn;
+        }
+        else
+        {
+            return Json::nullValue;
+        }
+    }
 
     Json::Value data;
     data["ret"] = 0;
@@ -178,7 +214,7 @@ Json::Value Erizo::removeSubscriber(const Json::Value &root)
     std::shared_ptr<Connection> sub_conn = getSubscriberConn(client, stream_id);
     if (sub_conn != nullptr)
     {
-        removeSubscriberConn(client, stream_id);
+        client->subscribers.erase(stream_id);
         sub_conn->close();
     }
 
@@ -212,7 +248,83 @@ Json::Value Erizo::addPublisher(const Json::Value &root)
     std::shared_ptr<Connection> conn = std::make_shared<Connection>();
     conn->setConnectionListener(this);
     conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
-    addPublisherConn(client, stream_id, conn);
+    client->publishers[stream_id] = conn;
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::addVirtualPublisher(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 6)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue ||
+        args[2].type() != Json::stringValue ||
+        args[3].type() != Json::intValue) //||
+                                          //   args[4].type() != Json::intValue ||
+                                          //  args[5].type() != Json::intValue)
+        return Json::nullValue;
+
+    std::string bridge_stream_id = args[0].asString();
+    std::string src_stream_id = args[1].asString();
+    std::string ip = args[2].asString();
+    uint16_t port = args[3].asInt();
+    uint32_t video_ssrc = args[4].asUInt();
+    uint32_t audio_ssrc = args[5].asUInt();
+
+    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(src_stream_id);
+    if (bridge_conn == nullptr)
+    {
+        bridge_conn = std::make_shared<BridgeConnection>();
+        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, thread_pool_, false, video_ssrc, audio_ssrc);
+        bridge_conns_[src_stream_id] = bridge_conn;
+    }
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::addVirtualSubscriber(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 4)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue ||
+        args[2].type() != Json::stringValue ||
+        args[3].type() != Json::intValue)
+        return Json::nullValue;
+
+    std::string bridge_stream_id = args[0].asString();
+    std::string src_stream_id = args[1].asString();
+    std::string ip = args[2].asString();
+    uint16_t port = args[3].asInt();
+
+    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(bridge_stream_id);
+    if (bridge_conn == nullptr)
+    {
+        std::shared_ptr<Connection> pub_conn = getPublisherConn(src_stream_id);
+        if (pub_conn == nullptr)
+            return Json::nullValue;
+
+        bridge_conn = std::make_shared<BridgeConnection>();
+        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, thread_pool_, true);
+
+        pub_conn->addSubscriber(bridge_stream_id, bridge_conn->getBridgeMediaStream());
+        bridge_conns_[bridge_stream_id] = bridge_conn;
+    }
 
     Json::Value data;
     data["ret"] = 0;
@@ -234,22 +346,22 @@ Json::Value Erizo::removePublisher(const Json::Value &root)
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
 
-    std::shared_ptr<Client> publisher = getOrCreateClient(client_id);
-    std::shared_ptr<Connection> pub_conn = getPublisherConn(publisher, stream_id);
+    std::shared_ptr<Client> pub_client = getOrCreateClient(client_id);
+    std::shared_ptr<Connection> pub_conn = getPublisherConn(pub_client, stream_id);
     if (pub_conn != nullptr)
     {
-        std::vector<std::shared_ptr<Client>> subscribers = getSubscribers(stream_id);
-        for (std::shared_ptr<Client> subscriber : subscribers)
+        std::vector<std::shared_ptr<Client>> sub_clients = getSubscribers(stream_id);
+        for (std::shared_ptr<Client> sub_client : sub_clients)
         {
-            std::shared_ptr<Connection> sub_conn = getSubscriberConn(subscriber, stream_id);
+            std::shared_ptr<Connection> sub_conn = getSubscriberConn(sub_client, stream_id);
             if (sub_conn != nullptr)
             {
-                removeSubscriberConn(subscriber, stream_id);
+                sub_client->subscribers.erase(stream_id);
                 sub_conn->close();
             }
         }
 
-        removePublisherConn(publisher, stream_id);
+        pub_client->publishers.erase(stream_id);
         pub_conn->close();
     }
 
@@ -294,47 +406,75 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     if (client == nullptr)
+    {
+
+        printf("111111111111\n");
         return Json::nullValue;
+    }
 
     std::shared_ptr<Connection> conn = getConnection(client, stream_id);
     if (conn == nullptr)
+    {
+
+        printf("22222222222222222\n");
         return Json::nullValue;
+    }
 
     if (!msg.isMember("type") ||
         msg["type"].type() != Json::stringValue)
+    {
+
+        printf("3333333333333333333\n");
         return Json::nullValue;
+    }
 
     std::string type = msg["type"].asString();
     if (!type.compare("offer"))
     {
         if (!msg.isMember("sdp") ||
             msg["sdp"].type() != Json::stringValue)
+        {
+
+            printf("4444444444444444\n");
             return Json::nullValue;
+        }
 
         std::string sdp = msg["sdp"].asString();
         if (conn->setRemoteSdp(sdp))
+        {
+
+            printf("55555555555555\n");
             return Json::nullValue;
+        }
     }
     else if (!type.compare("candidate"))
     {
         if (!msg.isMember("candidate") ||
             msg["candidate"].type() != Json::objectValue)
+        {
+
+            printf("666666666666666666\n");
             return Json::nullValue;
+        }
 
         Json::Value candidate = msg["candidate"];
         if (!candidate.isMember("sdpMLineIndex") ||
-            candidate["sdpMLineIndex"].type() != Json::uintValue ||
+            candidate["sdpMLineIndex"].type() != Json::intValue ||
             !candidate.isMember("sdpMid") ||
             candidate["sdpMid"].type() != Json::stringValue ||
             !candidate.isMember("candidate") ||
             candidate["candidate"].type() != Json::stringValue)
         {
-            int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
-            std::string mid = candidate["sdpMid"].asString();
-            std::string candidate_str = candidate["candidate"].asString();
-            if (conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
-                return Json::nullValue;
+
+            printf("7777777777777\n");
+            return Json::nullValue;
         }
+
+        int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
+        std::string mid = candidate["sdpMid"].asString();
+        std::string candidate_str = candidate["candidate"].asString();
+        if (conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
+            return Json::nullValue;
     }
 
     Json::Value data;
@@ -374,26 +514,6 @@ std::shared_ptr<Connection> Erizo::getPublisherConn(std::shared_ptr<Client> clie
     return nullptr;
 }
 
-void Erizo::addPublisherConn(std::shared_ptr<Client> client, const std::string &stream_id, std::shared_ptr<Connection> conn)
-{
-    client->publishers[stream_id] = conn;
-}
-
-void Erizo::addSubscriberConn(std::shared_ptr<Client> client, const std::string &stream_id, std::shared_ptr<Connection> conn)
-{
-    client->subscribers[stream_id] = conn;
-}
-
-void Erizo::removePublisherConn(std::shared_ptr<Client> client, const std::string &stream_id)
-{
-    client->publishers.erase(stream_id);
-}
-
-void Erizo::removeSubscriberConn(std::shared_ptr<Client> client, const std::string &stream_id)
-{
-    client->subscribers.erase(stream_id);
-}
-
 std::shared_ptr<Connection> Erizo::getSubscriberConn(std::shared_ptr<Client> client, const std::string &stream_id)
 {
     auto it = client->subscribers.find(stream_id);
@@ -416,6 +536,14 @@ std::shared_ptr<Connection> Erizo::getConnection(std::shared_ptr<Client> client,
             return it->second;
     }
 
+    return nullptr;
+}
+
+std::shared_ptr<BridgeConnection> Erizo::getBridgeConn(const std::string &stream_id)
+{
+    auto it = bridge_conns_.find(stream_id);
+    if (it != bridge_conns_.end())
+        return it->second;
     return nullptr;
 }
 
