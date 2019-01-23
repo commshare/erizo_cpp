@@ -55,6 +55,11 @@ public:
     return stream_id_;
   }
 
+  void setRoomId(const std::string &room_id)
+  {
+    room_id_ = room_id;
+  }
+
 private:
   std::shared_ptr<erizo::WebRtcConnection> webrtc_connection_;
   std::shared_ptr<erizo::OneToManyProcessor> otm_processor_;
@@ -63,6 +68,7 @@ private:
 
   std::string agent_id_;
   std::string erizo_id_;
+  std::string room_id_;
   std::string client_id_;
   std::string stream_id_;
   std::string label_;

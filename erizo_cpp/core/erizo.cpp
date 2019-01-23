@@ -229,24 +229,27 @@ Json::Value Erizo::addPublisher(const Json::Value &root)
         root["args"].type() != Json::arrayValue)
         return Json::nullValue;
 
-    if (root["args"].size() < 4)
+    if (root["args"].size() < 5)
         return Json::nullValue;
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
-        args[3].type() != Json::stringValue)
+        args[3].type() != Json::stringValue ||
+        args[4].type() != Json::stringValue)
         return Json::nullValue;
 
-    std::string client_id = args[0].asString();
-    std::string stream_id = args[1].asString();
-    std::string label = args[2].asString();
-    std::string reply_to = args[3].asString();
+    std::string room_id = args[0].asString();
+    std::string client_id = args[1].asString();
+    std::string stream_id = args[2].asString();
+    std::string label = args[3].asString();
+    std::string reply_to = args[4].asString();
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     std::shared_ptr<Connection> conn = std::make_shared<Connection>();
     conn->setConnectionListener(this);
+    conn->setRoomId(room_id);
     conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
     client->publishers[stream_id] = conn;
 

@@ -14,6 +14,7 @@ Connection::Connection() : webrtc_connection_(nullptr),
                            listener_(nullptr),
                            agent_id_(""),
                            erizo_id_(""),
+                           room_id_(""),
                            client_id_(""),
                            stream_id_(""),
                            is_publisher_(false),
@@ -108,6 +109,7 @@ void Connection::close()
 
     agent_id_ = "";
     erizo_id_ = "";
+    room_id_ = "";
     client_id_ = "";
     stream_id_ = "";
     is_publisher_ = false;
@@ -137,6 +139,7 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
             data["type"] = "publisher_answer";
             data["video_ssrc"] = video_ssrc;
             data["audio_ssrc"] = audio_ssrc;
+            data["roomId"] = room_id_;
         }
         else
         {
@@ -154,6 +157,8 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         data["erizoId"] = erizo_id_;
         data["streamId"] = stream_id_;
         data["clientId"] = client_id_;
+        if (is_publisher_)
+            data["roomId"] = room_id_;
         break;
     default:
         break;
