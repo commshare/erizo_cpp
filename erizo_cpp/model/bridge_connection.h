@@ -5,7 +5,7 @@
 #include <MediaStream.h>
 #include <BridgeMediaStream.h>
 #include <OneToManyProcessor.h>
-#include <thread/ThreadPool.h>
+#include <thread/IOThreadPool.h>
 
 class BridgeConnection
 {
@@ -17,7 +17,7 @@ public:
             const std::string &src_stream_id,
             const std::string &ip,
             uint16_t port,
-            std::shared_ptr<erizo::ThreadPool> thread_pool,
+            std::shared_ptr<erizo::IOThreadPool> io_thread_pool,
             bool is_send,
             uint32_t video_ssrc = 0,
             uint32_t audio_ssrc = 0);
@@ -27,11 +27,21 @@ public:
   void removeSubscriber(const std::string &client_id);
   std::shared_ptr<erizo::BridgeMediaStream> getBridgeMediaStream();
 
+  const std::string &getSrcStreamId()
+  {
+    return src_stream_id_;
+  }
+
+  const std::string &getBridgeStreamId()
+  {
+    return bridge_stream_id_;
+  }
+
 private:
   std::shared_ptr<erizo::BridgeMediaStream> bridge_media_stream_;
   std::shared_ptr<erizo::OneToManyProcessor> otm_processor_;
 
-  std::string id_;
+  std::string bridge_stream_id_;
   std::string src_stream_id_;
   bool is_send_;
   bool init_;

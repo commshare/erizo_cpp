@@ -42,7 +42,7 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const 
 
     if (erizo::BridgeIO::getInstance()->init(ip, port, Config::getInstance()->bridge_io_worker_num_))
     {
-        ELOG_ERROR("bridge-io init failed");
+        ELOG_ERROR("bridge_io init failed");
         return 1;
     }
 
@@ -109,6 +109,14 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const 
             {
                 reply_data = addVirtualSubscriber(data);
             }
+            else if (!method.compare("removeVirtualPublisher"))
+            {
+                reply_data = removeVirtualPublisher(data);
+            }
+            else if (!method.compare("removeVirtualSubscriber"))
+            {
+                reply_data = removeVirtualSubscriber(data);
+            }
 
             if (corrid == -1)
                 return;
@@ -157,7 +165,7 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
     std::string reply_to = args[3].asString();
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
-    std::shared_ptr<Connection> pub_conn = getPublisherConn(stream_id);
+    std::shared_ptr<Connection> pub_conn = getPublishConn(stream_id);
     if (pub_conn != nullptr)
     {
         std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
@@ -206,12 +214,16 @@ Json::Value Erizo::removeSubscriber(const Json::Value &root)
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
 
-    std::shared_ptr<Connection> pub_conn = getPublisherConn(stream_id);
+    std::shared_ptr<Connection> pub_conn = getPublishConn(stream_id);
     if (pub_conn != nullptr)
         pub_conn->removeSubscriber(client_id);
 
+    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(stream_id);
+    if (bridge_conn != nullptr)
+        bridge_conn->removeSubscriber(client_id);
+
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
-    std::shared_ptr<Connection> sub_conn = getSubscriberConn(client, stream_id);
+    std::shared_ptr<Connection> sub_conn = getSubscribeConn(client, stream_id);
     if (sub_conn != nullptr)
     {
         client->subscribers.erase(stream_id);
@@ -286,8 +298,44 @@ Json::Value Erizo::addVirtualPublisher(const Json::Value &root)
     if (bridge_conn == nullptr)
     {
         bridge_conn = std::make_shared<BridgeConnection>();
-        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, thread_pool_, false, video_ssrc, audio_ssrc);
+        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, io_thread_pool_, false, video_ssrc, audio_ssrc);
         bridge_conns_[src_stream_id] = bridge_conn;
+    }
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::removeVirtualPublisher(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 1)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue)
+        return Json::nullValue;
+
+    std::string src_stream_id = args[0].asString();
+    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(src_stream_id);
+    if (bridge_conn != nullptr)
+    {
+        std::vector<std::shared_ptr<Client>> sub_clients = getSubscribers(src_stream_id);
+        for (std::shared_ptr<Client> sub_client : sub_clients)
+        {
+            std::shared_ptr<Connection> sub_conn = getSubscribeConn(sub_client, src_stream_id);
+            if (sub_conn != nullptr)
+            {
+                sub_client->subscribers.erase(src_stream_id);
+                sub_conn->close();
+            }
+        }
+
+        bridge_conns_.erase(src_stream_id);
+        bridge_conn->close();
     }
 
     Json::Value data;
@@ -318,15 +366,47 @@ Json::Value Erizo::addVirtualSubscriber(const Json::Value &root)
     std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(bridge_stream_id);
     if (bridge_conn == nullptr)
     {
-        std::shared_ptr<Connection> pub_conn = getPublisherConn(src_stream_id);
+        std::shared_ptr<Connection> pub_conn = getPublishConn(src_stream_id);
         if (pub_conn == nullptr)
             return Json::nullValue;
 
         bridge_conn = std::make_shared<BridgeConnection>();
-        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, thread_pool_, true);
+        bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, io_thread_pool_, true);
 
         pub_conn->addSubscriber(bridge_stream_id, bridge_conn->getBridgeMediaStream());
         bridge_conns_[bridge_stream_id] = bridge_conn;
+    }
+
+    Json::Value data;
+    data["ret"] = 0;
+    return data;
+}
+
+Json::Value Erizo::removeVirtualSubscriber(const Json::Value &root)
+{
+    if (!root.isMember("args") ||
+        root["args"].type() != Json::arrayValue)
+        return Json::nullValue;
+    if (root["args"].size() < 2)
+        return Json::nullValue;
+
+    Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue)
+        return Json::nullValue;
+
+    std::string bridge_stream_id = args[0].asString();
+    std::string src_stream_id = args[1].asString();
+
+    std::shared_ptr<Connection> pub_conn = getPublishConn(src_stream_id);
+    if (pub_conn != nullptr)
+        pub_conn->removeSubscriber(bridge_stream_id);
+
+    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(bridge_stream_id);
+    if (bridge_conn != nullptr)
+    {
+        bridge_conns_.erase(bridge_stream_id);
+        bridge_conn->close();
     }
 
     Json::Value data;
@@ -350,18 +430,25 @@ Json::Value Erizo::removePublisher(const Json::Value &root)
     std::string stream_id = args[1].asString();
 
     std::shared_ptr<Client> pub_client = getOrCreateClient(client_id);
-    std::shared_ptr<Connection> pub_conn = getPublisherConn(pub_client, stream_id);
+    std::shared_ptr<Connection> pub_conn = getPublishConn(pub_client, stream_id);
     if (pub_conn != nullptr)
     {
         std::vector<std::shared_ptr<Client>> sub_clients = getSubscribers(stream_id);
         for (std::shared_ptr<Client> sub_client : sub_clients)
         {
-            std::shared_ptr<Connection> sub_conn = getSubscriberConn(sub_client, stream_id);
+            std::shared_ptr<Connection> sub_conn = getSubscribeConn(sub_client, stream_id);
             if (sub_conn != nullptr)
             {
                 sub_client->subscribers.erase(stream_id);
                 sub_conn->close();
             }
+        }
+
+        std::vector<std::shared_ptr<BridgeConnection>> bridge_conns = getBridgeConns(stream_id);
+        for (std::shared_ptr<BridgeConnection> bridge_conn : bridge_conns)
+        {
+            bridge_conns_.erase(bridge_conn->getBridgeStreamId());
+            bridge_conn->close();
         }
 
         pub_client->publishers.erase(stream_id);
@@ -415,7 +502,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
         return Json::nullValue;
     }
 
-    std::shared_ptr<Connection> conn = getConnection(client, stream_id);
+    std::shared_ptr<Connection> conn = getConn(client, stream_id);
     if (conn == nullptr)
     {
 
@@ -485,7 +572,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     return data;
 }
 
-std::shared_ptr<Connection> Erizo::getPublisherConn(const std::string &stream_id)
+std::shared_ptr<Connection> Erizo::getPublishConn(const std::string &stream_id)
 {
     for (auto it = clients_.begin(); it != clients_.end(); it++)
     {
@@ -508,7 +595,7 @@ std::vector<std::shared_ptr<Client>> Erizo::getSubscribers(const std::string &su
     return subscribers;
 }
 
-std::shared_ptr<Connection> Erizo::getPublisherConn(std::shared_ptr<Client> client, const std::string &stream_id)
+std::shared_ptr<Connection> Erizo::getPublishConn(std::shared_ptr<Client> client, const std::string &stream_id)
 {
     auto it = client->publishers.find(stream_id);
     if (it != client->publishers.end())
@@ -517,7 +604,7 @@ std::shared_ptr<Connection> Erizo::getPublisherConn(std::shared_ptr<Client> clie
     return nullptr;
 }
 
-std::shared_ptr<Connection> Erizo::getSubscriberConn(std::shared_ptr<Client> client, const std::string &stream_id)
+std::shared_ptr<Connection> Erizo::getSubscribeConn(std::shared_ptr<Client> client, const std::string &stream_id)
 {
     auto it = client->subscribers.find(stream_id);
     if (it != client->subscribers.end())
@@ -526,7 +613,7 @@ std::shared_ptr<Connection> Erizo::getSubscriberConn(std::shared_ptr<Client> cli
     return nullptr;
 }
 
-std::shared_ptr<Connection> Erizo::getConnection(std::shared_ptr<Client> client, const std::string &stream_id)
+std::shared_ptr<Connection> Erizo::getConn(std::shared_ptr<Client> client, const std::string &stream_id)
 {
     {
         auto it = client->publishers.find(stream_id);
@@ -548,6 +635,17 @@ std::shared_ptr<BridgeConnection> Erizo::getBridgeConn(const std::string &stream
     if (it != bridge_conns_.end())
         return it->second;
     return nullptr;
+}
+
+std::vector<std::shared_ptr<BridgeConnection>> Erizo::getBridgeConns(const std::string &src_stream_id)
+{
+    std::vector<std::shared_ptr<BridgeConnection>> bridge_conns;
+    for (auto it = bridge_conns_.begin(); it != bridge_conns_.end(); it++)
+    {
+        if (!it->second->getSrcStreamId().compare(src_stream_id))
+            bridge_conns.push_back(it->second);
+    }
+    return bridge_conns;
 }
 
 std::shared_ptr<Client> Erizo::getOrCreateClient(const std::string &client_id)

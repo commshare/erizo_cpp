@@ -68,7 +68,7 @@ int Config::initConfig(const Json::Value &root)
         !rabbitmq.isMember("uniquecast_exchange") ||
         rabbitmq["uniquecast_exchange"].type() != Json::stringValue)
     {
-        ELOG_ERROR("Rabbitmq config check error");
+        ELOG_ERROR("rabbitmq config check error");
         return 1;
     }
 
@@ -86,7 +86,7 @@ int Config::initConfig(const Json::Value &root)
         !ice.isMember("max_port") ||
         ice["max_port"].type() != Json::intValue)
     {
-        ELOG_ERROR("Ice config check error");
+        ELOG_ERROR("ice config check error");
         return 1;
     }
 
@@ -98,7 +98,7 @@ int Config::initConfig(const Json::Value &root)
         !stun.isMember("port") ||
         stun["port"].type() != Json::intValue)
     {
-        ELOG_ERROR("Ice stun check error");
+        ELOG_ERROR("stun config check error");
         return 1;
     }
 
@@ -114,7 +114,7 @@ int Config::initConfig(const Json::Value &root)
         !turn.isMember("password") ||
         turn["password"].type() != Json::stringValue)
     {
-        ELOG_ERROR("Ice turn check error");
+        ELOG_ERROR("turn config check error");
         return 1;
     }
 
@@ -126,7 +126,7 @@ int Config::initConfig(const Json::Value &root)
         !media.isMember("video_codec") ||
         media["video_codec"].type() != Json::stringValue)
     {
-        ELOG_ERROR("Media check error");
+        ELOG_ERROR("media config check error");
         return 1;
     }
 
@@ -231,7 +231,7 @@ int Config::init(const std::string &config_file)
     std::ifstream ifs(config_file, std::ios::binary);
     if (!ifs.is_open())
     {
-        ELOG_ERROR("Open %s failed", config_file);
+        ELOG_ERROR("open %s failed", config_file);
         return 1;
     }
 
@@ -239,19 +239,19 @@ int Config::init(const std::string &config_file)
     Json::Value root;
     if (!reader.parse(ifs, root))
     {
-        ELOG_ERROR("Parse %s failed", config_file);
+        ELOG_ERROR("parse %s failed", config_file);
         return 1;
     }
 
     if (initConfig(root))
     {
-        ELOG_ERROR("initConfig failed");
+        ELOG_ERROR("erizo config init failed");
         return 1;
     }
 
     if (initMedia(root))
     {
-        ELOG_ERROR("initMedia failed");
+        ELOG_ERROR("media config init failed");
         return 1;
     }
 
