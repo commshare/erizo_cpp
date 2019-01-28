@@ -74,6 +74,7 @@ private:
   std::string label_;
   bool is_publisher_;
   std::string reply_to_;
+  bool is_ready_;
 
   std::shared_ptr<erizo::ThreadPool> thread_pool_;
   std::shared_ptr<erizo::IOThreadPool> io_thread_pool_;

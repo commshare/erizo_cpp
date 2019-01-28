@@ -19,6 +19,7 @@ Connection::Connection() : webrtc_connection_(nullptr),
                            stream_id_(""),
                            is_publisher_(false),
                            reply_to_(""),
+                           is_ready_(false),
                            init_(false)
 
 {
@@ -91,16 +92,16 @@ void Connection::close()
     webrtc_connection_.reset();
     webrtc_connection_ = nullptr;
 
+    media_stream_->setFeedbackSink(nullptr);
+    media_stream_->setAudioSink(nullptr);
+    media_stream_->setVideoSink(nullptr);
+    media_stream_->setEventSink(nullptr);
     if (is_publisher_)
     {
         otm_processor_->close();
         otm_processor_.reset();
         otm_processor_ = nullptr;
     }
-    media_stream_->setFeedbackSink(nullptr);
-    media_stream_->setAudioSink(nullptr);
-    media_stream_->setVideoSink(nullptr);
-    media_stream_->setEventSink(nullptr);
     media_stream_->close();
     media_stream_.reset();
     media_stream_ = nullptr;
@@ -114,6 +115,7 @@ void Connection::close()
     stream_id_ = "";
     is_publisher_ = false;
     reply_to_ = "";
+    is_ready_ = false;
 
     init_ = false;
 }
@@ -137,28 +139,30 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
             uint32_t audio_ssrc;
             media_stream_->getRemoteSdpInfo()->getSSRC(video_ssrc, audio_ssrc);
             data["type"] = "publisher_answer";
-            data["video_ssrc"] = video_ssrc;
-            data["audio_ssrc"] = audio_ssrc;
+            data["videoSSRC"] = video_ssrc;
+            data["audioSSRC"] = audio_ssrc;
             data["roomId"] = room_id_;
         }
         else
         {
             data["type"] = "subscriber_answer";
+            data["erizoId"] = erizo_id_;
         }
-        data["agentId"] = agent_id_;
-        data["erizoId"] = erizo_id_;
+
         data["streamId"] = stream_id_;
         data["clientId"] = client_id_;
         data["sdp"] = message;
         break;
     case erizo::CONN_READY:
         data["type"] = "ready";
-        data["agentId"] = agent_id_;
-        data["erizoId"] = erizo_id_;
         data["streamId"] = stream_id_;
         data["clientId"] = client_id_;
         if (is_publisher_)
             data["roomId"] = room_id_;
+        is_ready_ = true;
+        break;
+    case erizo::CONN_FAILED:
+        ELOG_ERROR("streamId:%s failed",stream_id_);
         break;
     default:
         break;

@@ -28,13 +28,10 @@ void BridgeConnection::init(const std::string &bridge_stream_id,
     src_stream_id_ = src_stream_id;
     is_send_ = is_send;
 
-    printf("add stream:%s\n", bridge_stream_id_.c_str());
     bridge_media_stream_ = std::make_shared<erizo::BridgeMediaStream>();
     std::shared_ptr<erizo::IOWorker> io_worker = io_thread_pool->getLessUsedIOWorker();
     bridge_media_stream_->init(ip, port, bridge_stream_id_, io_worker, !is_send_, video_ssrc, audio_ssrc);
 
-    // bridge_media_stream_ = std::make_shared<erizo::BridgeMediaStream>(ip, port, bridge_stream_id_, video_ssrc, audio_ssrc, is_send_);
-    // bridge_media_stream_->init();
     if (!is_send_)
     {
         otm_processor_ = std::make_shared<erizo::OneToManyProcessor>();
@@ -53,11 +50,13 @@ void BridgeConnection::close()
     if (!init_)
         return;
     erizo::BridgeIO::getInstance()->removeStream(bridge_stream_id_);
+
+    bridge_media_stream_->setFeedbackSink(nullptr);
+    bridge_media_stream_->setAudioSink(nullptr);
+    bridge_media_stream_->setVideoSink(nullptr);
+    bridge_media_stream_->setEventSink(nullptr);
     if (!is_send_)
     {
-        bridge_media_stream_->setAudioSink(nullptr);
-        bridge_media_stream_->setVideoSink(nullptr);
-        bridge_media_stream_->setEventSink(nullptr);
         otm_processor_->close();
         otm_processor_.reset();
         otm_processor_ = nullptr;
@@ -67,7 +66,6 @@ void BridgeConnection::close()
     bridge_media_stream_ = nullptr;
     init_ = false;
 
-    printf("remove stream:%s\n", bridge_stream_id_.c_str());
 }
 
 std::shared_ptr<erizo::BridgeMediaStream> BridgeConnection::getBridgeMediaStream()

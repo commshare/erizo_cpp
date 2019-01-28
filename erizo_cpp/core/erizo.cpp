@@ -227,6 +227,8 @@ Json::Value Erizo::removeSubscriber(const Json::Value &root)
     if (sub_conn != nullptr)
     {
         client->subscribers.erase(stream_id);
+        if (client->publishers.size() == 0 && client->subscribers.size() == 0)
+            clients_.erase(client->id);
         sub_conn->close();
     }
 
@@ -282,9 +284,7 @@ Json::Value Erizo::addVirtualPublisher(const Json::Value &root)
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
-        args[3].type() != Json::intValue) //||
-                                          //   args[4].type() != Json::intValue ||
-                                          //  args[5].type() != Json::intValue)
+        args[3].type() != Json::intValue)
         return Json::nullValue;
 
     std::string bridge_stream_id = args[0].asString();
@@ -452,6 +452,8 @@ Json::Value Erizo::removePublisher(const Json::Value &root)
         }
 
         pub_client->publishers.erase(stream_id);
+        if (pub_client->publishers.size() == 0 && pub_client->subscribers.size() == 0)
+            clients_.erase(pub_client->id);
         pub_conn->close();
     }
 
@@ -497,16 +499,14 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     if (client == nullptr)
     {
-
-        printf("111111111111\n");
+        ELOG_ERROR("processSignaling getOrCreateClient failed");
         return Json::nullValue;
     }
 
     std::shared_ptr<Connection> conn = getConn(client, stream_id);
     if (conn == nullptr)
     {
-
-        printf("22222222222222222\n");
+        ELOG_ERROR("processSignaling getConn failed");
         return Json::nullValue;
     }
 
@@ -514,7 +514,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
         msg["type"].type() != Json::stringValue)
     {
 
-        printf("3333333333333333333\n");
+        ELOG_ERROR("processSignaling get type failed");
         return Json::nullValue;
     }
 
@@ -525,7 +525,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             msg["sdp"].type() != Json::stringValue)
         {
 
-            printf("4444444444444444\n");
+            ELOG_ERROR("processSignaling get sdp failed");
             return Json::nullValue;
         }
 
@@ -533,7 +533,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
         if (conn->setRemoteSdp(sdp))
         {
 
-            printf("55555555555555\n");
+            ELOG_ERROR("processSignaling get sdp 2 failed");
             return Json::nullValue;
         }
     }
@@ -543,7 +543,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             msg["candidate"].type() != Json::objectValue)
         {
 
-            printf("666666666666666666\n");
+            ELOG_ERROR("processSignaling get candidate  failed");
             return Json::nullValue;
         }
 
@@ -556,7 +556,7 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             candidate["candidate"].type() != Json::stringValue)
         {
 
-            printf("7777777777777\n");
+            ELOG_ERROR("processSignaling parse candidate  failed");
             return Json::nullValue;
         }
 
