@@ -1,8 +1,16 @@
 #include "erizo.h"
+
+#include "common/utils.h"
 #include "common/config.h"
 
-#include <dtls/DtlsSocket.h>
-#include <BridgeIO.h>
+#include "model/client.h"
+#include "model/connection.h"
+#include "model/bridge_conn.h"
+
+#include "rabbitmq/amqp_helper.h"
+
+#include <thread/IOThreadPool.h>
+#include <thread/ThreadPool.h>
 
 DEFINE_LOGGER(Erizo, "Erizo");
 
@@ -21,7 +29,7 @@ void Erizo::onEvent(const std::string &reply_to, const std::string &msg)
 {
     if (!init_)
         return;
-    amqp_uniquecast_->addCallback(reply_to, reply_to, msg);
+    amqp_uniquecast_->sendMessage(reply_to, reply_to, msg);
 }
 
 int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const std::string &ip, uint16_t port)
@@ -32,133 +40,105 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const 
     agent_id_ = agent_id;
     erizo_id_ = erizo_id;
 
-    io_thread_pool_ = std::make_shared<erizo::IOThreadPool>(Config::getInstance()->erizo_io_worker_num_);
+    io_thread_pool_ = std::make_shared<erizo::IOThreadPool>(Config::getInstance()->erizo_io_worker_num);
     io_thread_pool_->start();
 
-    thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num_);
+    thread_pool_ = std::make_shared<erizo::ThreadPool>(Config::getInstance()->erizo_worker_num);
     thread_pool_->start();
 
-    dtls::DtlsSocketContext::globalInit();
-
-    if (erizo::BridgeIO::getInstance()->init(ip, port, Config::getInstance()->bridge_io_worker_num_))
-    {
-        ELOG_ERROR("bridge_io init failed");
-        return 1;
-    }
-
-    std::string uniquecast_binding_key_ = erizo_id_;
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
-    if (amqp_uniquecast_->init(Config::getInstance()->uniquecast_exchange_, uniquecast_binding_key_, [&](const std::string &msg) {
+    if (amqp_uniquecast_->init(erizo_id_, [this](const std::string &msg) {
             Json::Value root;
             Json::Reader reader;
             if (!reader.parse(msg, root))
             {
-                ELOG_ERROR("message parse failed");
+                ELOG_ERROR("json parse root failed,dump %s", msg);
                 return;
             }
 
-            if (!root.isMember("corrID") ||
-                root["corrID"].type() != Json::intValue ||
-                !root.isMember("replyTo") ||
-                root["replyTo"].type() != Json::stringValue ||
-                !root.isMember("data") ||
+            if (!root.isMember("data") ||
                 root["data"].type() != Json::objectValue)
             {
-                ELOG_ERROR("message header invaild");
+                ELOG_ERROR("json parse data failed,dump %s", msg);
                 return;
             }
 
-            int corrid = root["corrID"].asInt();
-            std::string reply_to = root["replyTo"].asString();
             Json::Value data = root["data"];
             if (!data.isMember("method") ||
                 data["method"].type() != Json::stringValue)
             {
-                ELOG_ERROR("message data invaild");
+                ELOG_ERROR("json parse method failed,dump %s", msg);
                 return;
             }
 
-            Json::Value reply_data = Json::nullValue;
             std::string method = data["method"].asString();
             if (!method.compare("addPublisher"))
             {
-                reply_data = addPublisher(data);
+                addPublisher(data);
             }
             else if (!method.compare("addSubscriber"))
             {
-                reply_data = addSubscriber(data);
+                addSubscriber(data);
             }
             else if (!method.compare("processSignaling"))
             {
                 processSignaling(data);
-                return;
-            }
-            else if (!method.compare("removeSubscriber"))
-            {
-                reply_data = removeSubscriber(data);
-            }
-            else if (!method.compare("removePublisher"))
-            {
-                reply_data = removePublisher(data);
             }
             else if (!method.compare("addVirtualPublisher"))
             {
-                reply_data = addVirtualPublisher(data);
+                addVirtualPublisher(data);
             }
             else if (!method.compare("addVirtualSubscriber"))
             {
-                reply_data = addVirtualSubscriber(data);
+                addVirtualSubscriber(data);
+            }
+            else if (!method.compare("removeSubscriber"))
+            {
+                removeSubscriber(data);
+            }
+            else if (!method.compare("removePublisher"))
+            {
+                removePublisher(data);
             }
             else if (!method.compare("removeVirtualPublisher"))
             {
-                reply_data = removeVirtualPublisher(data);
+                removeVirtualPublisher(data);
             }
             else if (!method.compare("removeVirtualSubscriber"))
             {
-                reply_data = removeVirtualSubscriber(data);
+                removeVirtualSubscriber(data);
             }
-
-            if (corrid == -1)
-                return;
-
-            if (reply_data == Json::nullValue)
-            {
-                ELOG_ERROR("handle message failed,dump-->%s", msg);
-                return;
-            }
-
-            Json::Value reply;
-            reply["corrID"] = corrid;
-            reply["data"] = reply_data;
-            Json::FastWriter writer;
-            std::string reply_msg = writer.write(reply);
-            amqp_uniquecast_->addCallback(reply_to, reply_to, reply_msg);
         }))
     {
-        ELOG_ERROR("amqp uniquecast init failed");
+        ELOG_ERROR("initialize amqp failed");
         return 1;
     }
-
     init_ = true;
     return 0;
 }
 
-Json::Value Erizo::addSubscriber(const Json::Value &root)
+void Erizo::addSubscriber(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 4)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::stringValue)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
     std::string stream_label = args[2].asString();
@@ -177,7 +157,7 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
     }
     else
     {
-        std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(stream_id);
+        std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(stream_id);
         if (bridge_conn != nullptr)
         {
             std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
@@ -187,30 +167,29 @@ Json::Value Erizo::addSubscriber(const Json::Value &root)
             bridge_conn->addSubscriber(client_id, sub_conn->getMediaStream());
             client->subscribers[stream_id] = sub_conn;
         }
-        else
-        {
-            return Json::nullValue;
-        }
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::removeSubscriber(const Json::Value &root)
+void Erizo::removeSubscriber(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 2)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
 
@@ -218,7 +197,7 @@ Json::Value Erizo::removeSubscriber(const Json::Value &root)
     if (pub_conn != nullptr)
         pub_conn->removeSubscriber(client_id);
 
-    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(stream_id);
+    std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(stream_id);
     if (bridge_conn != nullptr)
         bridge_conn->removeSubscriber(client_id);
 
@@ -231,28 +210,31 @@ Json::Value Erizo::removeSubscriber(const Json::Value &root)
             clients_.erase(client->id);
         sub_conn->close();
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::addPublisher(const Json::Value &root)
+void Erizo::addPublisher(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 5)
-        return Json::nullValue;
-
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::stringValue ||
         args[4].type() != Json::stringValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     std::string room_id = args[0].asString();
     std::string client_id = args[1].asString();
@@ -266,26 +248,31 @@ Json::Value Erizo::addPublisher(const Json::Value &root)
     conn->setRoomId(room_id);
     conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
     client->publishers[stream_id] = conn;
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::addVirtualPublisher(const Json::Value &root)
+void Erizo::addVirtualPublisher(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 6)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::intValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     std::string bridge_stream_id = args[0].asString();
     std::string src_stream_id = args[1].asString();
@@ -294,33 +281,38 @@ Json::Value Erizo::addVirtualPublisher(const Json::Value &root)
     uint32_t video_ssrc = args[4].asUInt();
     uint32_t audio_ssrc = args[5].asUInt();
 
-    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(src_stream_id);
+    std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(src_stream_id);
     if (bridge_conn == nullptr)
     {
-        bridge_conn = std::make_shared<BridgeConnection>();
+        bridge_conn = std::make_shared<BridgeConn>();
         bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, io_thread_pool_, false, video_ssrc, audio_ssrc);
         bridge_conns_[src_stream_id] = bridge_conn;
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::removeVirtualPublisher(const Json::Value &root)
+void Erizo::removeVirtualPublisher(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 1)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     std::string src_stream_id = args[0].asString();
-    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(src_stream_id);
+    std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(src_stream_id);
     if (bridge_conn != nullptr)
     {
         std::vector<std::shared_ptr<Client>> sub_clients = getSubscribers(src_stream_id);
@@ -337,63 +329,73 @@ Json::Value Erizo::removeVirtualPublisher(const Json::Value &root)
         bridge_conns_.erase(src_stream_id);
         bridge_conn->close();
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::addVirtualSubscriber(const Json::Value &root)
+void Erizo::addVirtualSubscriber(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 4)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::intValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     std::string bridge_stream_id = args[0].asString();
     std::string src_stream_id = args[1].asString();
     std::string ip = args[2].asString();
     uint16_t port = args[3].asInt();
 
-    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(bridge_stream_id);
+    std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(bridge_stream_id);
     if (bridge_conn == nullptr)
     {
         std::shared_ptr<Connection> pub_conn = getPublishConn(src_stream_id);
         if (pub_conn == nullptr)
-            return Json::nullValue;
+            return;
 
-        bridge_conn = std::make_shared<BridgeConnection>();
+        bridge_conn = std::make_shared<BridgeConn>();
         bridge_conn->init(bridge_stream_id, src_stream_id, ip, port, io_thread_pool_, true);
 
         pub_conn->addSubscriber(bridge_stream_id, bridge_conn->getBridgeMediaStream());
         bridge_conns_[bridge_stream_id] = bridge_conn;
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::removeVirtualSubscriber(const Json::Value &root)
+void Erizo::removeVirtualSubscriber(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 2)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     std::string bridge_stream_id = args[0].asString();
     std::string src_stream_id = args[1].asString();
@@ -402,30 +404,35 @@ Json::Value Erizo::removeVirtualSubscriber(const Json::Value &root)
     if (pub_conn != nullptr)
         pub_conn->removeSubscriber(bridge_stream_id);
 
-    std::shared_ptr<BridgeConnection> bridge_conn = getBridgeConn(bridge_stream_id);
+    std::shared_ptr<BridgeConn> bridge_conn = getBridgeConn(bridge_stream_id);
     if (bridge_conn != nullptr)
     {
         bridge_conns_.erase(bridge_stream_id);
         bridge_conn->close();
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
-Json::Value Erizo::removePublisher(const Json::Value &root)
+void Erizo::removePublisher(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
     if (root["args"].size() < 2)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
 
@@ -444,8 +451,8 @@ Json::Value Erizo::removePublisher(const Json::Value &root)
             }
         }
 
-        std::vector<std::shared_ptr<BridgeConnection>> bridge_conns = getBridgeConns(stream_id);
-        for (std::shared_ptr<BridgeConnection> bridge_conn : bridge_conns)
+        std::vector<std::shared_ptr<BridgeConn>> bridge_conns = getBridgeConns(stream_id);
+        for (std::shared_ptr<BridgeConn> bridge_conn : bridge_conns)
         {
             bridge_conns_.erase(bridge_conn->getBridgeStreamId());
             bridge_conn->close();
@@ -456,10 +463,6 @@ Json::Value Erizo::removePublisher(const Json::Value &root)
             clients_.erase(pub_client->id);
         pub_conn->close();
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
 void Erizo::close()
@@ -470,52 +473,66 @@ void Erizo::close()
     amqp_uniquecast_->close();
     amqp_uniquecast_.reset();
     amqp_uniquecast_ = nullptr;
+
     thread_pool_->close();
     thread_pool_.reset();
     thread_pool_ = nullptr;
+
     io_thread_pool_->close();
     io_thread_pool_.reset();
     io_thread_pool_ = nullptr;
 
-    init_ = false;
+    clients_.clear();
+    bridge_conns_.clear();
+
     agent_id_ = "";
     erizo_id_ = "";
+
+    init_ = false;
 }
 
-Json::Value Erizo::processSignaling(const Json::Value &root)
+void Erizo::processSignaling(const Json::Value &root)
 {
     if (!root.isMember("args") ||
         root["args"].type() != Json::arrayValue)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     if (root["args"].size() < 3)
-        return Json::nullValue;
+    {
+        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        return;
+    }
 
     Json::Value args = root["args"];
+    if (args[0].type() != Json::stringValue ||
+        args[1].type() != Json::stringValue ||
+        args[2].type() != Json::objectValue)
+    {
+
+        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        return;
+    }
+
     std::string client_id = args[0].asString();
     std::string stream_id = args[1].asString();
     Json::Value msg = args[2];
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     if (client == nullptr)
-    {
-        ELOG_ERROR("processSignaling getOrCreateClient failed");
-        return Json::nullValue;
-    }
+        return;
 
     std::shared_ptr<Connection> conn = getConn(client, stream_id);
     if (conn == nullptr)
-    {
-        ELOG_ERROR("processSignaling getConn failed");
-        return Json::nullValue;
-    }
+        return;
 
     if (!msg.isMember("type") ||
         msg["type"].type() != Json::stringValue)
     {
-
-        ELOG_ERROR("processSignaling get type failed");
-        return Json::nullValue;
+        ELOG_ERROR("json parse type failed,dump %s", Utils::dumpJson(root));
+        return;
     }
 
     std::string type = msg["type"].asString();
@@ -524,27 +541,21 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
         if (!msg.isMember("sdp") ||
             msg["sdp"].type() != Json::stringValue)
         {
-
-            ELOG_ERROR("processSignaling get sdp failed");
-            return Json::nullValue;
+            ELOG_ERROR("json parse sdp failed,dump %s", Utils::dumpJson(root));
+            return;
         }
 
         std::string sdp = msg["sdp"].asString();
         if (conn->setRemoteSdp(sdp))
-        {
-
-            ELOG_ERROR("processSignaling get sdp 2 failed");
-            return Json::nullValue;
-        }
+            return;
     }
     else if (!type.compare("candidate"))
     {
         if (!msg.isMember("candidate") ||
             msg["candidate"].type() != Json::objectValue)
         {
-
-            ELOG_ERROR("processSignaling get candidate  failed");
-            return Json::nullValue;
+            ELOG_ERROR("json parse candidate failed,dump %s", Utils::dumpJson(root));
+            return;
         }
 
         Json::Value candidate = msg["candidate"];
@@ -555,21 +566,16 @@ Json::Value Erizo::processSignaling(const Json::Value &root)
             !candidate.isMember("candidate") ||
             candidate["candidate"].type() != Json::stringValue)
         {
-
-            ELOG_ERROR("processSignaling parse candidate  failed");
-            return Json::nullValue;
+            ELOG_ERROR("json candidate type error,dump %s", Utils::dumpJson(root));
+            return;
         }
 
         int sdp_mine_index = candidate["sdpMLineIndex"].asInt();
         std::string mid = candidate["sdpMid"].asString();
         std::string candidate_str = candidate["candidate"].asString();
         if (conn->addRemoteCandidate(mid, sdp_mine_index, candidate_str))
-            return Json::nullValue;
+            return;
     }
-
-    Json::Value data;
-    data["ret"] = 0;
-    return data;
 }
 
 std::shared_ptr<Connection> Erizo::getPublishConn(const std::string &stream_id)
@@ -629,7 +635,7 @@ std::shared_ptr<Connection> Erizo::getConn(std::shared_ptr<Client> client, const
     return nullptr;
 }
 
-std::shared_ptr<BridgeConnection> Erizo::getBridgeConn(const std::string &stream_id)
+std::shared_ptr<BridgeConn> Erizo::getBridgeConn(const std::string &stream_id)
 {
     auto it = bridge_conns_.find(stream_id);
     if (it != bridge_conns_.end())
@@ -637,9 +643,9 @@ std::shared_ptr<BridgeConnection> Erizo::getBridgeConn(const std::string &stream
     return nullptr;
 }
 
-std::vector<std::shared_ptr<BridgeConnection>> Erizo::getBridgeConns(const std::string &src_stream_id)
+std::vector<std::shared_ptr<BridgeConn>> Erizo::getBridgeConns(const std::string &src_stream_id)
 {
-    std::vector<std::shared_ptr<BridgeConnection>> bridge_conns;
+    std::vector<std::shared_ptr<BridgeConn>> bridge_conns;
     for (auto it = bridge_conns_.begin(); it != bridge_conns_.end(); it++)
     {
         if (!it->second->getSrcStreamId().compare(src_stream_id))

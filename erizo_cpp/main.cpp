@@ -1,42 +1,63 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include <dtls/DtlsSocket.h>
+#include <BridgeIO.h>
+
 #include "common/utils.h"
 #include "common/config.h"
 #include "core/erizo.h"
 
-Erizo ez;
+static log4cxx::LoggerPtr logger;
+static Erizo ez;
 
 void signal_handler(int signo)
 {
-    printf("[%d]:recevice signo:%d,erizo process quit\n", getpid(), signo);
     ez.close();
     exit(0);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc != 5)
+    signal(SIGINT, signal_handler);
+
+    pid_t pid = getpid();
+    char buf[1024];
+    sprintf(buf, "[%d]", pid);
+    logger = log4cxx::Logger::getLogger(buf);
+
+    if (argc < 5)
     {
-        printf("Usage:%s [agentID] [erizoID] [bridgeIP] [bridgePort]\n", argv[0]);
+        ELOG_WARN("Usage:%s [agentID] [erizoID] [bridgeIP] [bridgePort]", argv[0]);
         return 0;
     }
 
     if (Utils::initPath())
     {
-        printf("Change process path failed\n");
+        ELOG_ERROR("initialize working path failed");
         return 1;
     }
 
-    if (Config::getInstance()->init("erizo_config.json"))
+    if (Config::getInstance()->init("config.json"))
     {
-        printf("Config initialize failed\n");
+        ELOG_ERROR("load configure file failed");
         return 1;
     }
 
-    signal(SIGTERM, signal_handler);
-    signal(SIGINT, signal_handler);
-    
-    ez.init(argv[1], argv[2], argv[3], atoi(argv[4]));
-    sleep(100000);
+    dtls::DtlsSocketContext::globalInit();
+
+    if (erizo::BridgeIO::getInstance()->init(argv[3], atoi(argv[4]), Config::getInstance()->bridge_io_worker_num))
+    {
+        ELOG_ERROR("initialize bridge-io failed");
+        return 1;
+    }
+
+    if (ez.init(argv[1], argv[2], argv[3], atoi(argv[4])))
+    {
+        ELOG_ERROR("initialize erizo failed");
+        return 1;
+    }
+
+    while (true)
+        sleep(10000);
 }

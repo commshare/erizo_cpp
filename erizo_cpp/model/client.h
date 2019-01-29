@@ -3,8 +3,9 @@
 
 #include <string>
 #include <memory>
+#include <map>
 
-#include "connection.h"
+class Connection;
 
 struct Client
 {

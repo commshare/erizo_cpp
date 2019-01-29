@@ -29,27 +29,29 @@ public:
   AMQPHelper();
   ~AMQPHelper();
 
-  int init(const std::string &exchange,
-           const std::string &binding_key,
-           const std::function<void(const std::string &msg)> &func);
+  int init(const std::string &binding_key, const std::function<void(const std::string &)> &func);
   void close();
-  //void addCallback(const AMQPData &data);
-  void addCallback(const std::string &queuename, const std::string &binding_key, const std::string &send_msg);
+
+  void sendMessage(const std::string &queuename,
+                   const std::string &binding_key,
+                   const std::string &send_msg);
 
 private:
   int checkError(amqp_rpc_reply_t x);
-  int callback(const std::string &exchange, const std::string &queuename, const std::string &binding_key, const std::string &send_msg);
+  int send(const std::string &exchange,
+           const std::string &queuename,
+           const std::string &binding_key,
+           const std::string &send_msg);
 
 private:
-  bool init_;
-  std::atomic<bool> run_;
+  std::mutex send_queue_mux_;
+  std::condition_variable send_cond_;
+  std::queue<AMQPData> send_queue_;
   amqp_connection_state_t conn_;
   std::unique_ptr<std::thread> recv_thread_;
   std::unique_ptr<std::thread> send_thread_;
-
-  std::mutex mux_;
-  std::condition_variable cond_;
-  std::queue<AMQPData> queue_;
+  std::atomic<bool> run_;
+  bool init_;
 };
 
 #endif

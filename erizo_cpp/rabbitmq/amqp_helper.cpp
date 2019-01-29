@@ -5,45 +5,14 @@
 #include "common/config.h"
 
 DEFINE_LOGGER(AMQPHelper, "AMQPHelper");
-static Config *config = Config::getInstance();
 
-AMQPHelper::AMQPHelper() : init_(false),
-                           run_(false),
-                           conn_(nullptr),
+AMQPHelper::AMQPHelper() : conn_(nullptr),
                            recv_thread_(nullptr),
-                           send_thread_(nullptr)
-{
-}
+                           send_thread_(nullptr),
+                           run_(false),
+                           init_(false) {}
 
 AMQPHelper::~AMQPHelper() {}
-
-int AMQPHelper::callback(const std::string &exchange, const std::string &queuename, const std::string &binding_key, const std::string &send_msg)
-{
-    amqp_basic_properties_t props;
-    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG;
-    props.content_type = amqp_cstring_bytes("application/json");
-    props.delivery_mode = 2;
-    props.correlation_id = amqp_cstring_bytes("1");
-    props.reply_to = amqp_bytes_malloc_dup(amqp_cstring_bytes(queuename.c_str()));
-    if (props.reply_to.bytes == NULL)
-    {
-        ELOG_ERROR("out of memory while copying queue name");
-        return 1;
-    }
-
-    amqp_basic_publish(conn_, 1, amqp_cstring_bytes(exchange.c_str()),
-                       amqp_cstring_bytes(binding_key.c_str()), 0, 0,
-                       &props, amqp_cstring_bytes(send_msg.c_str()));
-    amqp_bytes_free(props.reply_to);
-    return 0;
-}
-
-void AMQPHelper::addCallback(const std::string &queuename, const std::string &binding_key, const std::string &send_msg)
-{
-    std::unique_lock<std::mutex> lock(mux_);
-    queue_.push({Config::getInstance()->uniquecast_exchange_, queuename, binding_key, send_msg});
-    cond_.notify_one();
-}
 
 int AMQPHelper::checkError(amqp_rpc_reply_t x)
 {
@@ -90,9 +59,7 @@ int AMQPHelper::checkError(amqp_rpc_reply_t x)
     return 1;
 }
 
-int AMQPHelper::init(const std::string &exchange,
-                     const std::string &binding_key,
-                     const std::function<void(const std::string &msg)> &func)
+int AMQPHelper::init(const std::string &binding_key, const std::function<void(const std::string &msg)> &func)
 {
     if (init_)
         return 0;
@@ -106,15 +73,15 @@ int AMQPHelper::init(const std::string &exchange,
         return 1;
     }
 
-    if (amqp_socket_open(socket, config->rabbitmq_hostname_.c_str(), config->rabbitmq_port_) != AMQP_STATUS_OK)
+    if (amqp_socket_open(socket, Config::getInstance()->rabbitmq_hostname.c_str(), Config::getInstance()->rabbitmq_port) != AMQP_STATUS_OK)
     {
         ELOG_ERROR("open tcp socket failed");
         return 1;
     }
 
     res = amqp_login(conn_, "/", 0, 131072, 0,
-                     AMQP_SASL_METHOD_PLAIN, config->rabbitmq_username_.c_str(),
-                     config->rabbitmq_passwd_.c_str());
+                     AMQP_SASL_METHOD_PLAIN, Config::getInstance()->rabbitmq_username.c_str(),
+                     Config::getInstance()->rabbitmq_passwd.c_str());
     if (checkError(res))
     {
         ELOG_ERROR("login failed");
@@ -134,7 +101,7 @@ int AMQPHelper::init(const std::string &exchange,
     res = amqp_get_rpc_reply(conn_);
     if (checkError(res))
     {
-        ELOG_ERROR("declaring queue failed");
+        ELOG_ERROR("declare queue failed");
         return 1;
     }
 
@@ -145,7 +112,7 @@ int AMQPHelper::init(const std::string &exchange,
         return 1;
     }
 
-    amqp_queue_bind(conn_, 1, queuename, amqp_cstring_bytes(exchange.c_str()),
+    amqp_queue_bind(conn_, 1, queuename, amqp_cstring_bytes(Config::getInstance()->uniquecast_exchange.c_str()),
                     amqp_cstring_bytes(binding_key.c_str()), amqp_empty_table);
     res = amqp_get_rpc_reply(conn_);
     if (checkError(res))
@@ -164,7 +131,7 @@ int AMQPHelper::init(const std::string &exchange,
     }
 
     run_ = true;
-    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([&, func]() {
+    recv_thread_ = std::unique_ptr<std::thread>(new std::thread([this, func]() {
         while (run_)
         {
             amqp_rpc_reply_t res;
@@ -180,7 +147,7 @@ int AMQPHelper::init(const std::string &exchange,
             {
                 if (res.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION && res.library_error == AMQP_STATUS_TIMEOUT)
                     continue;
-                ELOG_DEBUG("consumer thread quit...");
+                ELOG_DEBUG("consumer thread quit");
                 return;
             }
 
@@ -190,23 +157,21 @@ int AMQPHelper::init(const std::string &exchange,
         }
     }));
 
-    send_thread_ = std::unique_ptr<std::thread>(new std::thread([&]() {
+    send_thread_ = std::unique_ptr<std::thread>(new std::thread([this]() {
         while (run_)
         {
-            std::unique_lock<std::mutex> lock(mux_);
-
-            while (!queue_.empty())
+            std::unique_lock<std::mutex> lock(send_queue_mux_);
+            while (!send_queue_.empty())
             {
-                AMQPData data = queue_.front();
-                queue_.pop();
-                callback(data.exchange, data.queuename, data.binding_key, data.msg);
+                AMQPData data = send_queue_.front();
+                send_queue_.pop();
+                send(data.exchange, data.queuename, data.binding_key, data.msg);
             }
-            cond_.wait(lock);
+            send_cond_.wait(lock);
         }
     }));
 
     init_ = true;
-
     return 0;
 }
 
@@ -215,22 +180,55 @@ void AMQPHelper::close()
     if (!init_)
         return;
 
-    run_ = false;
-    recv_thread_->join();
-    cond_.notify_all();
-    send_thread_->join();
-
     amqp_channel_close(conn_, 1, AMQP_REPLY_SUCCESS);
     amqp_connection_close(conn_, AMQP_REPLY_SUCCESS);
     amqp_destroy_connection(conn_);
-
-    while (!queue_.empty())
-        queue_.pop();
-
-    init_ = false;
     conn_ = nullptr;
+
+    run_ = false;
+
+    recv_thread_->join();
     recv_thread_.reset();
     recv_thread_ = nullptr;
+
+    send_cond_.notify_all();
+    send_thread_->join();
     send_thread_.reset();
     send_thread_ = nullptr;
+
+    while (!send_queue_.empty())
+        send_queue_.pop();
+
+    init_ = false;
+}
+
+void AMQPHelper::sendMessage(const std::string &queuename, const std::string &binding_key, const std::string &send_msg)
+{
+    std::unique_lock<std::mutex> lock(send_queue_mux_);
+    send_queue_.push({Config::getInstance()->uniquecast_exchange, queuename, binding_key, send_msg});
+    send_cond_.notify_one();
+}
+
+int AMQPHelper::send(const std::string &exchange,
+                     const std::string &queuename,
+                     const std::string &binding_key,
+                     const std::string &send_msg)
+{
+    amqp_basic_properties_t props;
+    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG;
+    props.content_type = amqp_cstring_bytes("application/json");
+    props.delivery_mode = 2;
+    props.correlation_id = amqp_cstring_bytes("1");
+    props.reply_to = amqp_bytes_malloc_dup(amqp_cstring_bytes(queuename.c_str()));
+    if (props.reply_to.bytes == NULL)
+    {
+        ELOG_ERROR("Out of memory while copying queue name");
+        return 1;
+    }
+
+    amqp_basic_publish(conn_, 1, amqp_cstring_bytes(exchange.c_str()),
+                       amqp_cstring_bytes(binding_key.c_str()), 0, 0,
+                       &props, amqp_cstring_bytes(send_msg.c_str()));
+    amqp_bytes_free(props.reply_to);
+    return 0;
 }

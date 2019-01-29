@@ -1,25 +1,29 @@
-#include "bridge_connection.h"
+#include "bridge_conn.h"
 
 #include <BridgeIO.h>
+#include <MediaStream.h>
+#include <BridgeMediaStream.h>
+#include <OneToManyProcessor.h>
+#include <thread/IOThreadPool.h>
 
-BridgeConnection::BridgeConnection() : bridge_media_stream_(nullptr),
-                                       otm_processor_(nullptr),
-                                       bridge_stream_id_(""),
-                                       src_stream_id_(""),
-                                       init_(false)
+BridgeConn::BridgeConn() : bridge_media_stream_(nullptr),
+                           otm_processor_(nullptr),
+                           bridge_stream_id_(""),
+                           src_stream_id_(""),
+                           init_(false)
 {
 }
 
-BridgeConnection::~BridgeConnection() {}
+BridgeConn::~BridgeConn() {}
 
-void BridgeConnection::init(const std::string &bridge_stream_id,
-                            const std::string &src_stream_id,
-                            const std::string &ip,
-                            uint16_t port,
-                            std::shared_ptr<erizo::IOThreadPool> io_thread_pool,
-                            bool is_send,
-                            uint32_t video_ssrc,
-                            uint32_t audio_ssrc)
+void BridgeConn::init(const std::string &bridge_stream_id,
+                      const std::string &src_stream_id,
+                      const std::string &ip,
+                      uint16_t port,
+                      std::shared_ptr<erizo::IOThreadPool> io_thread_pool,
+                      bool is_send,
+                      uint32_t video_ssrc,
+                      uint32_t audio_ssrc)
 {
     if (init_)
         return;
@@ -45,7 +49,7 @@ void BridgeConnection::init(const std::string &bridge_stream_id,
     init_ = true;
 }
 
-void BridgeConnection::close()
+void BridgeConn::close()
 {
     if (!init_)
         return;
@@ -65,15 +69,14 @@ void BridgeConnection::close()
     bridge_media_stream_.reset();
     bridge_media_stream_ = nullptr;
     init_ = false;
-
 }
 
-std::shared_ptr<erizo::BridgeMediaStream> BridgeConnection::getBridgeMediaStream()
+std::shared_ptr<erizo::BridgeMediaStream> BridgeConn::getBridgeMediaStream()
 {
     return bridge_media_stream_;
 }
 
-void BridgeConnection::addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream)
+void BridgeConn::addSubscriber(const std::string &client_id, std::shared_ptr<erizo::MediaStream> media_stream)
 {
     if (otm_processor_ != nullptr)
     {
@@ -82,7 +85,7 @@ void BridgeConnection::addSubscriber(const std::string &client_id, std::shared_p
     }
 }
 
-void BridgeConnection::removeSubscriber(const std::string &client_id)
+void BridgeConn::removeSubscriber(const std::string &client_id)
 {
     if (otm_processor_ != nullptr)
     {

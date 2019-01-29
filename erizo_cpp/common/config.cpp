@@ -23,31 +23,31 @@ Config *Config::getInstance()
 
 Config::Config()
 {
-    rabbitmq_username_ = "linmin";
-    rabbitmq_passwd_ = "linmin";
-    rabbitmq_hostname_ = "localhost";
-    rabbitmq_port_ = 5672;
-    uniquecast_exchange_ = "erizo_uniquecast_exchange";
-    boardcast_exchange_ = "erizo_boardcast_exchange";
+    rabbitmq_username = "linmin";
+    rabbitmq_passwd = "linmin";
+    rabbitmq_hostname = "localhost";
+    rabbitmq_port = 5672;
+    uniquecast_exchange = "erizo_uniquecast_exchange";
+    boardcast_exchange = "erizo_boardcast_exchange";
 
-    erizo_worker_num_ = 5;
-    erizo_io_worker_num_ = 5;
-    bridge_io_worker_num_ = 5;
+    erizo_worker_num = 5;
+    erizo_io_worker_num = 5;
+    bridge_io_worker_num = 5;
 
-    stun_server_ = "stun:stun.l.google.com";
-    stun_port_ = 19302;
-    turn_server_ = "";
-    turn_port_ = 0;
-    turn_username_ = "";
-    turn_password_ = "";
-    network_interface_ = "";
-    ice_components_ = 0;
-    should_trickle_ = false;
-    max_port_ = 0;
-    min_port_ = 0;
+    stun_server = "stun:stun.l.google.com";
+    stun_port = 19302;
+    turn_server = "";
+    turn_port = 0;
+    turn_username = "";
+    turn_passwd = "";
+    network_interface = "";
+    ice_components = 0;
+    should_trickle = false;
+    max_port = 0;
+    min_port = 0;
 
-    audio_codec_ = "opus";
-    video_codec_ = "vp8";
+    audio_codec = "opus";
+    video_codec = "vp8";
 }
 
 int Config::initConfig(const Json::Value &root)
@@ -130,43 +130,43 @@ int Config::initConfig(const Json::Value &root)
         return 1;
     }
 
-    rabbitmq_hostname_ = rabbitmq["host"].asString();
-    rabbitmq_port_ = rabbitmq["port"].asInt();
-    rabbitmq_username_ = rabbitmq["username"].asString();
-    rabbitmq_passwd_ = rabbitmq["password"].asString();
-    uniquecast_exchange_ = rabbitmq["uniquecast_exchange"].asString();
-    boardcast_exchange_ = rabbitmq["boardcast_exchange"].asString();
+    rabbitmq_hostname = rabbitmq["host"].asString();
+    rabbitmq_port = rabbitmq["port"].asInt();
+    rabbitmq_username = rabbitmq["username"].asString();
+    rabbitmq_passwd = rabbitmq["password"].asString();
+    uniquecast_exchange = rabbitmq["uniquecast_exchange"].asString();
+    boardcast_exchange = rabbitmq["boardcast_exchange"].asString();
 
-    stun_server_ = stun["host"].asString();
-    stun_port_ = stun["port"].asInt();
-    turn_server_ = turn["host"].asString();
-    turn_port_ = turn["port"].asInt();
-    turn_username_ = turn["username"].asString();
-    turn_password_ = turn["password"].asString();
-    network_interface_ = ice["network_interface"].asString();
-    ice_components_ = ice["ice_components"].asInt();
-    should_trickle_ = ice["should_trickle"].asBool();
-    min_port_ = ice["min_port"].asInt();
-    max_port_ = ice["max_port"].asInt();
-    audio_codec_ = media["audio_codec"].asString();
-    video_codec_ = media["video_codec"].asString();
+    stun_server = stun["host"].asString();
+    stun_port = stun["port"].asInt();
+    turn_server = turn["host"].asString();
+    turn_port = turn["port"].asInt();
+    turn_username = turn["username"].asString();
+    turn_passwd = turn["password"].asString();
+    network_interface = ice["network_interface"].asString();
+    ice_components = ice["ice_components"].asInt();
+    should_trickle = ice["should_trickle"].asBool();
+    min_port = ice["min_port"].asInt();
+    max_port = ice["max_port"].asInt();
+    audio_codec = media["audio_codec"].asString();
+    video_codec = media["video_codec"].asString();
 
     return 0;
 }
 
 int Config::initMedia(const Json::Value &root)
 {
-    ext_maps_.clear();
+    ext_maps.clear();
     if (root.isMember("extMappings") && root["extMappings"].type() == Json::arrayValue)
     {
         uint32_t num = root["extMappings"].size();
         for (uint32_t i = 0; i < num; i++)
         {
-            ext_maps_.push_back({i, root["extMappings"][i].asString()});
+            ext_maps.push_back({i, root["extMappings"][i].asString()});
         }
     }
 
-    rtp_maps_.clear();
+    rtp_maps.clear();
     if (root.isMember("mediaType") && root["mediaType"].type() == Json::arrayValue)
     {
         uint32_t num = root["mediaType"].size();
@@ -211,13 +211,13 @@ int Config::initMedia(const Json::Value &root)
             {
 
                 rtp_map.encoding_name = value["encodingName"].asString();
-                if (!strcasecmp(rtp_map.encoding_name.c_str(), audio_codec_.c_str()))
+                if (!strcasecmp(rtp_map.encoding_name.c_str(), audio_codec.c_str()))
                 {
-                    rtp_maps_.push_back(rtp_map);
+                    rtp_maps.push_back(rtp_map);
                 }
-                else if (!strcasecmp(rtp_map.encoding_name.c_str(), video_codec_.c_str()))
+                else if (!strcasecmp(rtp_map.encoding_name.c_str(), video_codec.c_str()))
                 {
-                    rtp_maps_.push_back(rtp_map);
+                    rtp_maps.push_back(rtp_map);
                 }
             }
         }

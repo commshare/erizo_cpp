@@ -17,53 +17,51 @@ public:
   static Config *getInstance();
   virtual ~Config();
   int init(const std::string &config_file);
-  const std::vector<erizo::ExtMap> &getExpMaps() { return ext_maps_; }
-  const std::vector<erizo::RtpMap> &getRtpMaps() { return rtp_maps_; }
 
 private:
   Config();
-
   int initConfig(const Json::Value &root);
   int initMedia(const Json::Value &root);
 
 public:
   // RabbitMQ config
-  std::string rabbitmq_username_;
-  std::string rabbitmq_passwd_;
-  std::string rabbitmq_hostname_;
-  unsigned short rabbitmq_port_;
-  std::string uniquecast_exchange_;
-  std::string boardcast_exchange_;
+  std::string rabbitmq_username;
+  std::string rabbitmq_passwd;
+  std::string rabbitmq_hostname;
+  unsigned short rabbitmq_port;
+  std::string uniquecast_exchange;
+  std::string boardcast_exchange;
 
   // Erizo threadpool config
-  int erizo_worker_num_;
-  int erizo_io_worker_num_;
-  int bridge_io_worker_num_;
+  int erizo_worker_num;
+  int erizo_io_worker_num;
+  int bridge_io_worker_num;
 
   // Erizo libnice config
   // stun
-  std::string stun_server_;
-  unsigned short stun_port_;
+  std::string stun_server;
+  unsigned short stun_port;
   // turn
-  std::string turn_server_;
-  unsigned short turn_port_;
-  std::string turn_username_;
-  std::string turn_password_;
-  std::string network_interface_;
+  std::string turn_server;
+  unsigned short turn_port;
+  std::string turn_username;
+  std::string turn_passwd;
+  std::string network_interface;
   // other
-  unsigned int ice_components_;
-  bool should_trickle_;
-  int max_port_;
-  int min_port_;
+  unsigned int ice_components;
+  bool should_trickle;
+  int max_port;
+  int min_port;
 
   //Erizo media type
-  std::string audio_codec_;
-  std::string video_codec_;
+  std::string audio_codec;
+  std::string video_codec;
+
+  std::vector<erizo::ExtMap> ext_maps;
+  std::vector<erizo::RtpMap> rtp_maps;
 
 private:
   static Config *instance_;
-  std::vector<erizo::ExtMap> ext_maps_;
-  std::vector<erizo::RtpMap> rtp_maps_;
 };
 
 #endif

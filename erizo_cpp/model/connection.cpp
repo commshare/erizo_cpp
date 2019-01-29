@@ -1,10 +1,18 @@
 #include "connection.h"
 
-#include <IceConnection.h>
 #include <json/json.h>
 
+#include <IceConnection.h>
+#include <BridgeMediaStream.h>
+#include <OneToManyProcessor.h>
+#include <thread/ThreadPool.h>
+#include <thread/IOThreadPool.h>
+#include <MediaStream.h>
+
+#include "rabbitmq/amqp_helper.h"
 #include "common/utils.h"
 #include "common/config.h"
+#include "core/erizo.h"
 
 DEFINE_LOGGER(Connection, "Connection");
 
@@ -17,13 +25,10 @@ Connection::Connection() : webrtc_connection_(nullptr),
                            room_id_(""),
                            client_id_(""),
                            stream_id_(""),
+                           label_(""),
                            is_publisher_(false),
                            reply_to_(""),
-                           is_ready_(false),
-                           init_(false)
-
-{
-}
+                           init_(false) {}
 
 Connection::~Connection() {}
 
@@ -52,18 +57,18 @@ void Connection::init(const std::string &agent_id,
     std::shared_ptr<erizo::IOWorker> io_worker = io_thread_pool->getLessUsedIOWorker();
 
     erizo::IceConfig ice_config;
-    ice_config.stun_server = Config::getInstance()->stun_server_;
-    ice_config.stun_port = Config::getInstance()->stun_port_;
-    ice_config.min_port = Config::getInstance()->min_port_;
-    ice_config.max_port = Config::getInstance()->max_port_;
-    ice_config.should_trickle = Config::getInstance()->should_trickle_;
-    ice_config.turn_server = Config::getInstance()->turn_server_;
-    ice_config.turn_port = Config::getInstance()->turn_port_;
-    ice_config.turn_username = Config::getInstance()->turn_username_;
-    ice_config.turn_pass = Config::getInstance()->turn_password_;
-    ice_config.network_interface = Config::getInstance()->network_interface_;
+    ice_config.stun_server = Config::getInstance()->stun_server;
+    ice_config.stun_port = Config::getInstance()->stun_port;
+    ice_config.min_port = Config::getInstance()->min_port;
+    ice_config.max_port = Config::getInstance()->max_port;
+    ice_config.should_trickle = Config::getInstance()->should_trickle;
+    ice_config.turn_server = Config::getInstance()->turn_server;
+    ice_config.turn_port = Config::getInstance()->turn_port;
+    ice_config.turn_username = Config::getInstance()->turn_username;
+    ice_config.turn_pass = Config::getInstance()->turn_passwd;
+    ice_config.network_interface = Config::getInstance()->network_interface;
 
-    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, Utils::getUUID(), ice_config, Config::getInstance()->getRtpMaps(), Config::getInstance()->getExpMaps(), this);
+    webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, Utils::getUUID(), ice_config, Config::getInstance()->rtp_maps, Config::getInstance()->ext_maps, this);
 
     std::shared_ptr<erizo::Worker> ms_worker = thread_pool->getLessUsedWorker();
     media_stream_ = std::make_shared<erizo::MediaStream>(ms_worker, webrtc_connection_, stream_id, label_, is_publisher_);
@@ -113,9 +118,9 @@ void Connection::close()
     room_id_ = "";
     client_id_ = "";
     stream_id_ = "";
+    label_ = "";
     is_publisher_ = false;
     reply_to_ = "";
-    is_ready_ = false;
 
     init_ = false;
 }
@@ -159,10 +164,9 @@ void Connection::notifyEvent(erizo::WebRTCEvent newEvent, const std::string &mes
         data["clientId"] = client_id_;
         if (is_publisher_)
             data["roomId"] = room_id_;
-        is_ready_ = true;
         break;
     case erizo::CONN_FAILED:
-        ELOG_ERROR("streamId:%s failed",stream_id_);
+        ELOG_ERROR("stream-->%s ice failed", stream_id_);
         break;
     default:
         break;

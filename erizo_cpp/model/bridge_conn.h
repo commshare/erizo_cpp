@@ -1,17 +1,23 @@
 #ifndef BRIDGE_CONNECTION_H
 #define BRIDGE_CONNECTION_H
 
-#include <logger.h>
-#include <MediaStream.h>
-#include <BridgeMediaStream.h>
-#include <OneToManyProcessor.h>
-#include <thread/IOThreadPool.h>
+#include <memory>
 
-class BridgeConnection
+#include <logger.h>
+
+namespace erizo
+{
+class BridgeMediaStream;
+class OneToManyProcessor;
+class IOThreadPool;
+class MediaStream;
+}; // namespace erizo
+
+class BridgeConn
 {
 public:
-  BridgeConnection();
-  ~BridgeConnection();
+  BridgeConn();
+  ~BridgeConn();
 
   void init(const std::string &bridge_stream_id,
             const std::string &src_stream_id,
