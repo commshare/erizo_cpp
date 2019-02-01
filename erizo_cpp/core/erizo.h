@@ -29,14 +29,16 @@ class Erizo : public ConnectionListener
   DECLARE_LOGGER();
 
 public:
-  Erizo();
   ~Erizo();
+  static Erizo *getInstance();
 
   int init(const std::string &agent_id, const std::string &erizo_id, const std::string &ip, uint16_t port);
   void close();
   void onEvent(const std::string &reply_to, const std::string &msg) override;
 
 private:
+  Erizo();
+
   void addPublisher(const Json::Value &root);
   void removePublisher(const Json::Value &root);
 
@@ -70,6 +72,8 @@ private:
   std::string agent_id_;
   std::string erizo_id_;
   bool init_;
+
+  static Erizo *instance_;
 };
 
 #endif

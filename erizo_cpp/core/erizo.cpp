@@ -25,6 +25,14 @@ Erizo::Erizo() : amqp_uniquecast_(nullptr),
 
 Erizo::~Erizo() {}
 
+Erizo *Erizo::instance_ = nullptr;
+Erizo *Erizo::getInstance()
+{
+    if (!instance_)
+        instance_ = new Erizo();
+    return instance_;
+}
+
 void Erizo::onEvent(const std::string &reply_to, const std::string &msg)
 {
     if (!init_)
@@ -110,7 +118,7 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const 
             }
         }))
     {
-        ELOG_ERROR("initialize amqp failed");
+        ELOG_ERROR("amqp initialize failed");
         return 1;
     }
     init_ = true;

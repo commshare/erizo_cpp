@@ -9,12 +9,11 @@
 #include "core/erizo.h"
 
 static log4cxx::LoggerPtr logger;
-static Erizo ez;
+static bool run = true;
 
 void signal_handler(int signo)
 {
-    ez.close();
-    exit(0);
+    run = false;
 }
 
 int main(int argc, char *argv[])
@@ -34,7 +33,7 @@ int main(int argc, char *argv[])
 
     if (Utils::initPath())
     {
-        ELOG_ERROR("initialize working path failed");
+        ELOG_ERROR("working path initialize failed");
         return 1;
     }
 
@@ -48,16 +47,20 @@ int main(int argc, char *argv[])
 
     if (erizo::BridgeIO::getInstance()->init(argv[3], atoi(argv[4]), Config::getInstance()->bridge_io_worker_num))
     {
-        ELOG_ERROR("initialize bridge-io failed");
+        ELOG_ERROR("bridge-io initialize failed");
         return 1;
     }
 
-    if (ez.init(argv[1], argv[2], argv[3], atoi(argv[4])))
+    if (Erizo::getInstance()->init(argv[1], argv[2], argv[3], atoi(argv[4])))
     {
-        ELOG_ERROR("initialize erizo failed");
+        ELOG_ERROR("erizo initialize failed");
         return 1;
     }
 
-    while (true)
-        sleep(10000);
+    while (run)
+        sleep(1);
+
+    Erizo::getInstance()->close();
+    erizo::BridgeIO::getInstance()->close();
+    return 0;
 }

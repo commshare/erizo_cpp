@@ -147,10 +147,8 @@ int AMQPHelper::init(const std::string &binding_key, const std::function<void(co
             {
                 if (res.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION && res.library_error == AMQP_STATUS_TIMEOUT)
                     continue;
-                ELOG_DEBUG("consumer thread quit");
                 return;
             }
-
             std::string msg((const char *)envelope.message.body.bytes, envelope.message.body.len);
             func(msg);
             amqp_destroy_envelope(&envelope);
@@ -180,13 +178,7 @@ void AMQPHelper::close()
     if (!init_)
         return;
 
-    amqp_channel_close(conn_, 1, AMQP_REPLY_SUCCESS);
-    amqp_connection_close(conn_, AMQP_REPLY_SUCCESS);
-    amqp_destroy_connection(conn_);
-    conn_ = nullptr;
-
     run_ = false;
-
     recv_thread_->join();
     recv_thread_.reset();
     recv_thread_ = nullptr;
@@ -195,6 +187,11 @@ void AMQPHelper::close()
     send_thread_->join();
     send_thread_.reset();
     send_thread_ = nullptr;
+
+    amqp_channel_close(conn_, 1, AMQP_REPLY_SUCCESS);
+    amqp_connection_close(conn_, AMQP_REPLY_SUCCESS);
+    amqp_destroy_connection(conn_);
+    conn_ = nullptr;
 
     while (!send_queue_.empty())
         send_queue_.pop();
