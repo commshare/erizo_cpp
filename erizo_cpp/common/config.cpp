@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <string.h>
+#include <SdpInfo.h>
 
 DEFINE_LOGGER(Config, "Config");
 Config *Config::instance_ = nullptr;

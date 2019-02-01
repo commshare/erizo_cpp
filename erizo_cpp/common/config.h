@@ -3,11 +3,16 @@
 
 #include <string>
 #include <vector>
-#include <map>
 
 #include <json/json.h>
 #include <logger.h>
-#include <SdpInfo.h>
+
+
+namespace erizo
+{
+class ExtMap;
+class RtpMap;
+} // namespace erizo
 
 class Config
 {

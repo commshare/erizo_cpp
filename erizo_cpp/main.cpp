@@ -20,9 +20,9 @@ int main(int argc, char *argv[])
 {
     signal(SIGINT, signal_handler);
 
-    pid_t pid = getpid();
     char buf[1024];
-    sprintf(buf, "[%d]", pid);
+    pid_t pid = getpid();
+    sprintf(buf, "[erizo-%d]", pid);
     logger = log4cxx::Logger::getLogger(buf);
 
     if (argc < 5)
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     }
 
     while (run)
-        sleep(1);
+        sleep(10000);
 
     Erizo::getInstance()->close();
     erizo::BridgeIO::getInstance()->close();
