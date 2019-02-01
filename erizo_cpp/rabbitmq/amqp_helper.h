@@ -5,13 +5,14 @@
 #include <amqp_tcp_socket.h>
 #include <logger.h>
 
+#include <string>
 #include <thread>
 #include <memory>
 #include <atomic>
-#include <mutex>
 #include <queue>
 #include <functional>
 #include <condition_variable>
+#include <mutex>
 
 class AMQPHelper
 {

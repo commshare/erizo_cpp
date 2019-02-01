@@ -22,7 +22,7 @@ int AMQPHelper::checkError(amqp_rpc_reply_t x)
         return 0;
 
     case AMQP_RESPONSE_NONE:
-        ELOG_ERROR("missing RPC reply type!");
+        ELOG_ERROR("missing rpc reply type!");
         break;
 
     case AMQP_RESPONSE_LIBRARY_EXCEPTION:
@@ -219,7 +219,7 @@ int AMQPHelper::send(const std::string &exchange,
     props.reply_to = amqp_bytes_malloc_dup(amqp_cstring_bytes(queuename.c_str()));
     if (props.reply_to.bytes == NULL)
     {
-        ELOG_ERROR("Out of memory while copying queue name");
+        ELOG_ERROR("out of memory while copying queue name");
         return 1;
     }
 

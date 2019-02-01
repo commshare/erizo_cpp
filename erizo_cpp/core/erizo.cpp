@@ -135,7 +135,7 @@ void Erizo::addSubscriber(const Json::Value &root)
     }
     if (root["args"].size() < 4)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
     Json::Value args = root["args"];
@@ -144,7 +144,7 @@ void Erizo::addSubscriber(const Json::Value &root)
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
     std::string client_id = args[0].asString();
@@ -188,14 +188,14 @@ void Erizo::removeSubscriber(const Json::Value &root)
     }
     if (root["args"].size() < 2)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
     std::string client_id = args[0].asString();
@@ -230,7 +230,7 @@ void Erizo::addPublisher(const Json::Value &root)
     }
     if (root["args"].size() < 5)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
     Json::Value args = root["args"];
@@ -240,7 +240,7 @@ void Erizo::addPublisher(const Json::Value &root)
         args[3].type() != Json::stringValue ||
         args[4].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -268,7 +268,7 @@ void Erizo::addVirtualPublisher(const Json::Value &root)
     }
     if (root["args"].size() < 6)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -278,7 +278,7 @@ void Erizo::addVirtualPublisher(const Json::Value &root)
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::intValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type feiled,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -308,14 +308,14 @@ void Erizo::removeVirtualPublisher(const Json::Value &root)
     }
     if (root["args"].size() < 1)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
     Json::Value args = root["args"];
     if (args[0].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -349,7 +349,7 @@ void Erizo::addVirtualSubscriber(const Json::Value &root)
     }
     if (root["args"].size() < 4)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -359,7 +359,7 @@ void Erizo::addVirtualSubscriber(const Json::Value &root)
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::intValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -393,7 +393,7 @@ void Erizo::removeVirtualSubscriber(const Json::Value &root)
     }
     if (root["args"].size() < 2)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -401,7 +401,7 @@ void Erizo::removeVirtualSubscriber(const Json::Value &root)
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -430,7 +430,7 @@ void Erizo::removePublisher(const Json::Value &root)
     }
     if (root["args"].size() < 2)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -438,7 +438,7 @@ void Erizo::removePublisher(const Json::Value &root)
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue)
     {
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
     std::string client_id = args[0].asString();
@@ -510,7 +510,7 @@ void Erizo::processSignaling(const Json::Value &root)
 
     if (root["args"].size() < 3)
     {
-        ELOG_ERROR("json args num error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -520,7 +520,7 @@ void Erizo::processSignaling(const Json::Value &root)
         args[2].type() != Json::objectValue)
     {
 
-        ELOG_ERROR("json args type error,dump %s", Utils::dumpJson(root));
+        ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
     }
 
@@ -574,7 +574,7 @@ void Erizo::processSignaling(const Json::Value &root)
             !candidate.isMember("candidate") ||
             candidate["candidate"].type() != Json::stringValue)
         {
-            ELOG_ERROR("json candidate type error,dump %s", Utils::dumpJson(root));
+            ELOG_ERROR("json parse [sdpMLineIndex/sdpMid/candidate] failed,dump %s", Utils::dumpJson(root));
             return;
         }
 
