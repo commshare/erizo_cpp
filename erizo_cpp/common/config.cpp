@@ -8,11 +8,6 @@ DEFINE_LOGGER(Config, "Config");
 Config *Config::instance_ = nullptr;
 Config::~Config()
 {
-    if (instance_ != nullptr)
-    {
-        delete instance_;
-        instance_ = nullptr;
-    }
 }
 
 Config *Config::getInstance()
@@ -236,7 +231,7 @@ int Config::init(const std::string &config_file)
         return 1;
     }
 
-    Json::Reader reader;
+    Json::Reader reader(Json::Features::strictMode());
     Json::Value root;
     if (!reader.parse(ifs, root))
     {

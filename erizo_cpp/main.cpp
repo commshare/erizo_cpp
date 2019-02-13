@@ -8,7 +8,8 @@
 #include "common/config.h"
 #include "core/erizo.h"
 
-static log4cxx::LoggerPtr logger;
+LOGGER_DECLARE()
+
 static bool run = true;
 
 void signal_handler(int signo)
@@ -18,12 +19,10 @@ void signal_handler(int signo)
 
 int main(int argc, char *argv[])
 {
+    srand(time(0));
     signal(SIGINT, signal_handler);
 
-    char buf[1024];
-    pid_t pid = getpid();
-    sprintf(buf, "[erizo-%d]", pid);
-    logger = log4cxx::Logger::getLogger(buf);
+    LOGGER_INIT();
 
     if (argc < 5)
     {

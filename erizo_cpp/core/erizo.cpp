@@ -57,7 +57,7 @@ int Erizo::init(const std::string &agent_id, const std::string &erizo_id, const 
     amqp_uniquecast_ = std::make_shared<AMQPHelper>();
     if (amqp_uniquecast_->init(erizo_id_, [this](const std::string &msg) {
             Json::Value root;
-            Json::Reader reader;
+            Json::Reader reader(Json::Features::strictMode());
             if (!reader.parse(msg, root))
             {
                 ELOG_ERROR("json parse root failed,dump %s", msg);
@@ -489,7 +489,7 @@ void Erizo::close()
     io_thread_pool_->close();
     io_thread_pool_.reset();
     io_thread_pool_ = nullptr;
-
+  
     clients_.clear();
     bridge_conns_.clear();
 
