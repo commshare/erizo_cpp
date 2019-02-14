@@ -63,7 +63,18 @@ class Utils
     static std::string getUUID()
     {
         boost::uuids::uuid uuid = boost::uuids::random_generator()();
-        return boost::uuids::to_string(uuid);
+        std::string str = boost::uuids::to_string(uuid);
+
+        std::string::iterator it = str.begin();
+        for (; it != str.end();)
+        {
+            if (*it == '-')
+                it = str.erase(it);
+            else
+                it++;
+        }
+
+        return str;
     }
 
     static std::string dumpJson(const Json::Value &root)
