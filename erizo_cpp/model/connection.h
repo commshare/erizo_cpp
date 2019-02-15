@@ -37,6 +37,7 @@ public:
             const std::string &label,
             bool is_publisher,
             const std::string &reply_to,
+            const std::string &isp,
             std::shared_ptr<erizo::ThreadPool> thread_pool,
             std::shared_ptr<erizo::IOThreadPool> io_thread_pool);
   void close();

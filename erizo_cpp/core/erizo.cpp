@@ -133,7 +133,7 @@ void Erizo::addSubscriber(const Json::Value &root)
         ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
         return;
     }
-    if (root["args"].size() < 4)
+    if (root["args"].size() < 5)
     {
         ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
@@ -142,7 +142,8 @@ void Erizo::addSubscriber(const Json::Value &root)
     if (args[0].type() != Json::stringValue ||
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
-        args[3].type() != Json::stringValue)
+        args[3].type() != Json::stringValue ||
+        args[4].type() != Json::stringValue)
     {
         ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
@@ -151,6 +152,7 @@ void Erizo::addSubscriber(const Json::Value &root)
     std::string stream_id = args[1].asString();
     std::string stream_label = args[2].asString();
     std::string reply_to = args[3].asString();
+    std::string isp = args[4].asString();
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     std::shared_ptr<Connection> pub_conn = getPublishConn(stream_id);
@@ -158,7 +160,7 @@ void Erizo::addSubscriber(const Json::Value &root)
     {
         std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
         sub_conn->setConnectionListener(this);
-        sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
+        sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, isp, thread_pool_, io_thread_pool_);
 
         pub_conn->addSubscriber(client_id, sub_conn->getMediaStream());
         client->subscribers[stream_id] = sub_conn;
@@ -170,7 +172,7 @@ void Erizo::addSubscriber(const Json::Value &root)
         {
             std::shared_ptr<Connection> sub_conn = std::make_shared<Connection>();
             sub_conn->setConnectionListener(this);
-            sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, thread_pool_, io_thread_pool_);
+            sub_conn->init(agent_id_, erizo_id_, client_id, stream_id, stream_label, false, reply_to, isp, thread_pool_, io_thread_pool_);
 
             bridge_conn->addSubscriber(client_id, sub_conn->getMediaStream());
             client->subscribers[stream_id] = sub_conn;
@@ -228,7 +230,7 @@ void Erizo::addPublisher(const Json::Value &root)
         ELOG_ERROR("json parse args failed,dump %s", Utils::dumpJson(root));
         return;
     }
-    if (root["args"].size() < 5)
+    if (root["args"].size() < 6)
     {
         ELOG_ERROR("json parse args num failed,dump %s", Utils::dumpJson(root));
         return;
@@ -238,7 +240,8 @@ void Erizo::addPublisher(const Json::Value &root)
         args[1].type() != Json::stringValue ||
         args[2].type() != Json::stringValue ||
         args[3].type() != Json::stringValue ||
-        args[4].type() != Json::stringValue)
+        args[4].type() != Json::stringValue ||
+        args[5].type() != Json::stringValue)
     {
         ELOG_ERROR("json parse args type failed,dump %s", Utils::dumpJson(root));
         return;
@@ -249,12 +252,13 @@ void Erizo::addPublisher(const Json::Value &root)
     std::string stream_id = args[2].asString();
     std::string label = args[3].asString();
     std::string reply_to = args[4].asString();
+    std::string isp = args[5].asString();
 
     std::shared_ptr<Client> client = getOrCreateClient(client_id);
     std::shared_ptr<Connection> conn = std::make_shared<Connection>();
     conn->setConnectionListener(this);
     conn->setRoomId(room_id);
-    conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, thread_pool_, io_thread_pool_);
+    conn->init(agent_id_, erizo_id_, client_id, stream_id, label, true, reply_to, isp, thread_pool_, io_thread_pool_);
     client->publishers[stream_id] = conn;
 }
 
@@ -489,7 +493,7 @@ void Erizo::close()
     io_thread_pool_->close();
     io_thread_pool_.reset();
     io_thread_pool_ = nullptr;
-  
+
     clients_.clear();
     bridge_conns_.clear();
 

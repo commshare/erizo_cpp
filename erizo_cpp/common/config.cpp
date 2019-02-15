@@ -36,7 +36,7 @@ Config::Config()
     turn_port = 0;
     turn_username = "";
     turn_passwd = "";
-    network_interface = "";
+
     ice_components = 0;
     should_trickle = false;
     max_port = 0;
@@ -71,8 +71,8 @@ int Config::initConfig(const Json::Value &root)
     Json::Value ice = root["ice"];
     if (!root.isMember("ice") ||
         ice.type() != Json::objectValue ||
-        !ice.isMember("network_interface") ||
-        ice["network_interface"].type() != Json::stringValue ||
+        !ice.isMember("network_interfaces") ||
+        ice["network_interfaces"].type() != Json::objectValue ||
         !ice.isMember("ice_components") ||
         ice["ice_components"].type() != Json::intValue ||
         !ice.isMember("should_trickle") ||
@@ -85,6 +85,19 @@ int Config::initConfig(const Json::Value &root)
         ELOG_ERROR("ice config check error");
         return 1;
     }
+
+    Json::Value network_interfaces = ice["network_interfaces"];
+    if (network_interfaces.isMember("CTL") &&
+        network_interfaces["CTL"].type() == Json::stringValue)
+        network_interfaces_["CTL"] = network_interfaces["CTL"].asString();
+
+    if (network_interfaces.isMember("CNC") &&
+        network_interfaces["CNC"].type() == Json::stringValue)
+        network_interfaces_["CNC"] = network_interfaces["CNC"].asString();
+
+    if (network_interfaces.isMember("MOB") &&
+        network_interfaces["MOB"].type() == Json::stringValue)
+        network_interfaces_["MOB"] = network_interfaces["MOB"].asString();
 
     Json::Value stun = ice["stun"];
     if (!ice.isMember("stun") ||
@@ -139,7 +152,6 @@ int Config::initConfig(const Json::Value &root)
     turn_port = turn["port"].asInt();
     turn_username = turn["username"].asString();
     turn_passwd = turn["password"].asString();
-    network_interface = ice["network_interface"].asString();
     ice_components = ice["ice_components"].asInt();
     should_trickle = ice["should_trickle"].asBool();
     min_port = ice["min_port"].asInt();

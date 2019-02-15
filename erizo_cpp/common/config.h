@@ -7,7 +7,6 @@
 #include <json/json.h>
 #include <logger.h>
 
-
 namespace erizo
 {
 class ExtMap;
@@ -51,7 +50,7 @@ public:
   unsigned short turn_port;
   std::string turn_username;
   std::string turn_passwd;
-  std::string network_interface;
+  std::map<std::string, std::string> network_interfaces_;
   // other
   unsigned int ice_components;
   bool should_trickle;

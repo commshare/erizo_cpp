@@ -18,7 +18,7 @@
             "username": "",
             "password": ""
         },
-        "network_interface": "",
+        "network_interfaces": {},
         "ice_components": 0,
         "should_trickle": false,
         "min_port": 0,

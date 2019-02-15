@@ -39,6 +39,7 @@ void Connection::init(const std::string &agent_id,
                       const std::string &label,
                       bool is_publisher,
                       const std::string &reply_to,
+                      const std::string &isp,
                       std::shared_ptr<erizo::ThreadPool> thread_pool,
                       std::shared_ptr<erizo::IOThreadPool> io_thread_pool)
 {
@@ -66,7 +67,11 @@ void Connection::init(const std::string &agent_id,
     ice_config.turn_port = Config::getInstance()->turn_port;
     ice_config.turn_username = Config::getInstance()->turn_username;
     ice_config.turn_pass = Config::getInstance()->turn_passwd;
-    ice_config.network_interface = Config::getInstance()->network_interface;
+    ice_config.network_interface = "";
+    printf("isp:%s\n", isp.c_str());
+    auto it = Config::getInstance()->network_interfaces_.find(isp);
+    if (it != Config::getInstance()->network_interfaces_.end())
+        ice_config.network_interface = it->second;
 
     webrtc_connection_ = std::make_shared<erizo::WebRtcConnection>(worker, io_worker, Utils::getUUID(), ice_config, Config::getInstance()->rtp_maps, Config::getInstance()->ext_maps, this);
 
